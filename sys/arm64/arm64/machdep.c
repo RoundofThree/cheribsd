@@ -160,6 +160,9 @@ struct kva_md_info kmi;
 int64_t dczva_line_size;	/* The size of cache line the dc zva zeroes */
 int has_pan;
 
+int enable_pan = 1;
+TUNABLE_INT("machdep.mitigations.enable_pan", &enable_pan);
+
 /*
  * Physical address of the EFI System Table. Stashed from the metadata hints
  * passed into the kernel and used by the EFI code to call runtime services.
@@ -190,6 +193,11 @@ static void
 pan_setup(void)
 {
 	uint64_t id_aa64mfr1;
+
+	if (!enable_pan) {
+		has_pan = 0;
+		return;
+	}
 
 	id_aa64mfr1 = READ_SPECIALREG(id_aa64mmfr1_el1);
 	if (ID_AA64MMFR1_PAN_VAL(id_aa64mfr1) != ID_AA64MMFR1_PAN_NONE)
