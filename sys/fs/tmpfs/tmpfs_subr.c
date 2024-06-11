@@ -1559,7 +1559,9 @@ tmpfs_dir_getdotdent(struct tmpfs_mount *tm, struct tmpfs_node *node,
 	MPASS(uio->uio_offset == TMPFS_DIRCOOKIE_DOT);
 
 	dent.d_fileno = node->tn_id;
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
 	dent.d_off = TMPFS_DIRCOOKIE_DOTDOT;
+#endif
 	dent.d_type = DT_DIR;
 	dent.d_namlen = 1;
 	dent.d_name[0] = '.';
@@ -1585,7 +1587,11 @@ tmpfs_dir_getdotdent(struct tmpfs_mount *tm, struct tmpfs_node *node,
  */
 static int
 tmpfs_dir_getdotdotdent(struct tmpfs_mount *tm, struct tmpfs_node *node,
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
     struct uio *uio, off_t next)
+#else
+	struct uio *uio)
+#endif
 {
 	struct tmpfs_node *parent;
 	struct dirent dent;
@@ -1603,7 +1609,9 @@ tmpfs_dir_getdotdotdent(struct tmpfs_mount *tm, struct tmpfs_node *node,
 		return (ENOENT);
 
 	dent.d_fileno = parent->tn_id;
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
 	dent.d_off = next;
+#endif
 	dent.d_type = DT_DIR;
 	dent.d_namlen = 2;
 	dent.d_name[0] = '.';
@@ -1633,7 +1641,11 @@ tmpfs_dir_getdents(struct tmpfs_mount *tm, struct tmpfs_node *node,
     struct uio *uio, int maxcookies, uint64_t *cookies, int *ncookies)
 {
 	struct tmpfs_dir_cursor dc;
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
 	struct tmpfs_dirent *de, *nde;
+#else
+	struct tmpfs_dirent *de;
+#endif
 	off_t off;
 	int error;
 
@@ -1654,11 +1666,18 @@ tmpfs_dir_getdents(struct tmpfs_mount *tm, struct tmpfs_node *node,
 		error = tmpfs_dir_getdotdent(tm, node, uio);
 		if (error != 0)
 			return (error);
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
 		uio->uio_offset = off = TMPFS_DIRCOOKIE_DOTDOT;
 		if (cookies != NULL)
 			cookies[(*ncookies)++] = off;
+#else
+		uio->uio_offset = TMPFS_DIRCOOKIE_DOTDOT;
+		if (cookies != NULL)
+			cookies[(*ncookies)++] = off = uio->uio_offset;
+#endif
 		/* FALLTHROUGH */
 	case TMPFS_DIRCOOKIE_DOTDOT:
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
 		de = tmpfs_dir_first(node, &dc);
 		off = tmpfs_dirent_cookie(de);
 		error = tmpfs_dir_getdotdotdent(tm, node, uio, off);
@@ -1667,6 +1686,15 @@ tmpfs_dir_getdents(struct tmpfs_mount *tm, struct tmpfs_node *node,
 		uio->uio_offset = off;
 		if (cookies != NULL)
 			cookies[(*ncookies)++] = off;
+#else
+		error = tmpfs_dir_getdotdotdent(tm, node, uio);
+		if (error != 0)
+			return (error);
+		de = tmpfs_dir_first(node, &dc);
+		uio->uio_offset = tmpfs_dirent_cookie(de);
+		if (cookies != NULL)
+			cookies[(*ncookies)++] = off = uio->uio_offset;
+#endif
 		/* EOF. */
 		if (de == NULL)
 			return (0);
@@ -1735,6 +1763,7 @@ tmpfs_dir_getdents(struct tmpfs_mount *tm, struct tmpfs_node *node,
 		MPASS(de->td_namelen < sizeof(d.d_name));
 		(void)memcpy(d.d_name, de->ud.td_name, de->td_namelen);
 		d.d_reclen = GENERIC_DIRSIZ(&d);
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
 
 		/*
 		 * Stop reading if the directory entry we are treating is bigger
@@ -1762,6 +1791,32 @@ tmpfs_dir_getdents(struct tmpfs_mount *tm, struct tmpfs_node *node,
 				cookies[(*ncookies)++] = off;
 			}
 		}
+#else /* ENABLE_PAST_LOCAL_VULNERABILITIES */
+		dirent_terminate(&d);
+
+		/*
+		 * Stop reading if the directory entry we are treating is bigger
+		 * than the amount of data that can be returned.
+		 */
+		if (d.d_reclen > uio->uio_resid) {
+			error = EJUSTRETURN;
+			break;
+		}
+
+		/*
+		 * Copy the new dirent structure into the output buffer and
+		 * advance pointers.
+		 */
+		error = uiomove(&d, d.d_reclen, uio);
+		if (error == 0) {
+			de = tmpfs_dir_next(node, &dc);
+			if (cookies != NULL) {
+				off = tmpfs_dirent_cookie(de);
+				MPASS(*ncookies < maxcookies);
+				cookies[(*ncookies)++] = off;
+			}
+		}
+#endif /* !ENABLE_PAST_LOCAL_VULNERABILITIES */
 	} while (error == 0 && uio->uio_resid > 0 && de != NULL);
 
 	/* Skip setting off when using cookies as it is already done above. */

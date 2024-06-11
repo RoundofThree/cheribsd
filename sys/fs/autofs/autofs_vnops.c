@@ -365,7 +365,9 @@ autofs_readdir_one(struct uio *uio, const char *name, int fileno,
 		return (EINVAL);
 
 	dirent.d_fileno = fileno;
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
 	dirent.d_off = uio->uio_offset + reclen;
+#endif
 	dirent.d_reclen = reclen;
 	dirent.d_type = DT_DIR;
 	dirent.d_namlen = namlen;
