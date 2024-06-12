@@ -262,6 +262,10 @@ struct ioc_capability {			/*<2>*/
 
 #define	CDIOCCAPABILITY	_IOR('c',30,struct ioc_capability)	/*<2>*/
 
+#ifdef ENABLE_PAST_LOCAL_VULNERABILITIES
+#define CDIOCREADSUBCHANNEL_SYSSPACE _IOWR('c', 31, struct ioc_read_subchannel)
+#endif
+
 #endif /* !_SYS_CDIO_H_ */
 // CHERI CHANGES START
 // {
