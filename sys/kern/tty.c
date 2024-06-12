@@ -238,6 +238,11 @@ ttydev_leave(struct tty *tp)
 
 	tp->t_flags |= TF_OPENCLOSE;
 
+#ifdef ENABLE_PAST_LOCAL_VULNERABILITIES
+	/* Stop asynchronous I/O. */
+	funsetown(&tp->t_sigio);
+#endif
+
 	/* Remove console TTY. */
 	constty_clear(tp);
 
@@ -1149,8 +1154,10 @@ tty_rel_free(struct tty *tp)
 		return;
 	}
 
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
 	/* Stop asynchronous I/O. */
 	funsetown(&tp->t_sigio);
+#endif
 
 	/* TTY can be deallocated. */
 	dev = tp->t_dev;
