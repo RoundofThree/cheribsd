@@ -2328,8 +2328,13 @@ kern_timedreceive(struct thread *td, int mqd, char * __capability msg_ptr,
 		return (error);
 	if (user_abs_timeout != NULL) {
 		error = copyin(user_abs_timeout, &ets, sizeof(ets));
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
 		if (error != 0)
 			goto out;
+#else
+		if (error != 0)
+			return (error);
+#endif
 		abs_timeout = &ets;
 	} else
 		abs_timeout = NULL;
@@ -2365,8 +2370,13 @@ kern_kmq_timedsend(struct thread *td, int mqd,
 		return (error);
 	if (user_abs_timeout != NULL) {
 		error = copyin(user_abs_timeout, &ets, sizeof(ets));
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
 		if (error != 0)
 			goto out;
+#else
+		if (error != 0)
+			return (error);
+#endif
 		abs_timeout = &ets;
 	} else
 		abs_timeout = NULL;
