@@ -669,7 +669,11 @@ ah_input(struct mbuf *m, struct secasvar *sav, int skip, int protoff)
 
 	/* These are passed as-is to the callback. */
 	xd->sav = sav;
+#ifndef ENABLE_PAST_REMOTE_VULNERABILITIES
 	xd->nxt = hl;
+#else
+	xd->nxt = ah->ah_nxt;
+#endif
 	xd->protoff = protoff;
 	xd->skip = skip;
 	xd->cryptoid = cryptoid;
