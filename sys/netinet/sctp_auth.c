@@ -516,7 +516,11 @@ sctp_insert_sharedkey(struct sctp_keyhead *shared_keys,
 		} else if (new_skey->keyid == skey->keyid) {
 			/* replace the existing key */
 			/* verify this key *can* be replaced */
+#ifndef ENABLE_PAST_REMOTE_VULNERABILITIES
 			if ((skey->deactivated) || (skey->refcount > 1)) {
+#else
+			if ((skey->deactivated) && (skey->refcount > 1)) {
+#endif
 				SCTPDBG(SCTP_DEBUG_AUTH1,
 				    "can't replace shared key id %u\n",
 				    new_skey->keyid);
