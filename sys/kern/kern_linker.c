@@ -1337,7 +1337,11 @@ out:
 int
 sys_kldstat(struct thread *td, struct kldstat_args *uap)
 {
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
 	struct kld_file_stat *stat;
+#else
+	struct kld_file_stat stat;
+#endif
 	int error, version;
 
 	/*
@@ -1349,12 +1353,17 @@ sys_kldstat(struct thread *td, struct kldstat_args *uap)
 	if (version != sizeof(struct kld_file_stat_1) &&
 	    version != sizeof(struct kld_file_stat))
 		return (EINVAL);
-
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
 	stat = malloc(sizeof(*stat), M_TEMP, M_WAITOK | M_ZERO);
 	error = kern_kldstat(td, uap->fileid, stat);
 	if (error == 0)
 		error = copyout(stat, uap->stat, version);
 	free(stat, M_TEMP);
+#else
+	error = kern_kldstat(td, uap->fileid, &stat);
+	if (error == 0)
+		error = copyout(&stat, uap->stat, version);
+#endif
 	return (error);
 }
 
