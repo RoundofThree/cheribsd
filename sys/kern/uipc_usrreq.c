@@ -2748,8 +2748,10 @@ unp_internalize(struct mbuf **controlp, struct thread *td,
 		error = EINVAL;
 
 out:
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
 	if (error != 0 && initial_controlp != NULL)
 		unp_internalize_cleanup_rights(*initial_controlp);
+#endif
 	m_freem(control);
 	return (error);
 }
