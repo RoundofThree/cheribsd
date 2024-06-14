@@ -368,7 +368,7 @@ reloc_plt(Obj_Entry *obj, int flags, RtldLockState *lockstate)
 				*(uintptr_t *)where = cheri_sealentry(jump_slot_base +
 					*where);
 			} else {
-				*(uintptr_t *)where = jump_slot_base + *(uintptr_t *)where;
+				*(uintptr_t *)where = jump_slot_base + *where;
 			}
 			break;
 #else
