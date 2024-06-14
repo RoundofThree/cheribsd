@@ -84,7 +84,7 @@ init_pltgot(Obj_Entry *obj)
 static uintcap_t
 init_cap_from_fragment(const Elf_Addr *fragment, void * __capability data_cap,
     const void * __capability text_rodata_cap, Elf_Addr base_addr,
-    Elf_Size addend)
+    Elf_Size addend, bool sentries)
 {
 	uintcap_t cap;
 	Elf_Addr address, len;
@@ -109,7 +109,7 @@ init_cap_from_fragment(const Elf_Addr *fragment, void * __capability data_cap,
 
 	cap += addend;
 
-	if (perms == MORELLO_FRAG_EXECUTABLE) {
+	if (perms == MORELLO_FRAG_EXECUTABLE && sentries) {
 		/*
 		 * TODO tight bounds: lower bound and len should be set
 		 * with LSB == 0 for C64 code.
@@ -167,8 +167,9 @@ _rtld_relocate_nonplt_self(Elf_Dyn *dynp, Elf_Auxinfo *aux)
 			__builtin_trap();
 
 		where = (Elf_Addr *)(relocbase + rela->r_offset);
+		// XXXR3: sentries hardcoded as globals are not available yet
 		*(uintcap_t *)where = init_cap_from_fragment(where, relocbase,
-		    pcc, (Elf_Addr)(uintptr_t)relocbase, rela->r_addend);
+		    pcc, (Elf_Addr)(uintptr_t)relocbase, rela->r_addend, /*sentries*/true);
 	}
 }
 #endif /* __CHERI_PURE_CAPABILITY__ */
@@ -363,8 +364,12 @@ reloc_plt(Obj_Entry *obj, int flags, RtldLockState *lockstate)
 			 * made it an R_MORELLO_RELATIVE-like fragment instead.
 			 * https://git.morello-project.org/morello/llvm-project/-/issues/19
 			 */
-			*(uintptr_t *)where = cheri_sealentry(jump_slot_base +
-			    *where);
+			if (!ld_sentry_disable) {
+				*(uintptr_t *)where = cheri_sealentry(jump_slot_base +
+					*where);
+			} else {
+				*(uintptr_t *)where = jump_slot_base + *(uintptr_t *)where;
+			}
 			break;
 #else
 		case R_AARCH64_JUMP_SLOT:
@@ -491,7 +496,7 @@ reloc_iresolve_one(Obj_Entry *obj, const Elf_Rela *rela,
 		ptr = init_cap_from_fragment(fragment, obj->relocbase,
 		    obj->text_rodata_cap,
 		    (Elf_Addr)(uintptr_t)obj->relocbase,
-		    rela->r_addend);
+		    rela->r_addend, /*sentries*/!ld_sentry_disable);
 #else
 	ptr = (uintptr_t)(obj->relocbase + rela->r_addend);
 #endif
@@ -755,7 +760,7 @@ reloc_non_plt(Obj_Entry *obj, Obj_Entry *obj_rtld, int flags,
 			    init_cap_from_fragment(where, data_cap,
 				text_rodata_cap,
 				(Elf_Addr)(uintptr_t)obj->relocbase,
-				rela->r_addend);
+				rela->r_addend, /*sentries*/!ld_sentry_disable);
 			break;
 #endif /* __has_feature(capabilities) */
 		case R_AARCH64_ABS64:

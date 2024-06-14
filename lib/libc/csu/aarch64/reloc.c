@@ -65,6 +65,7 @@ init_cap_from_fragment(const Elf_Addr *fragment, void * __capability data_cap,
 
 	cap += addend;
 
+	// XXXR3: TODO: tuning sealing of irelocs
 	if (perms == MORELLO_FRAG_EXECUTABLE) {
 		/*
 		 * TODO tight bounds: lower bound and len should be set

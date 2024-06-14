@@ -236,6 +236,7 @@ static const char *ld_elf_hints_path;	/* Environment variable for alternative hi
 static const char *ld_tracing;	/* Called from ldd to print libs */
 static const char *ld_utrace;	/* Use utrace() to log events. */
 static bool ld_skip_init_funcs = false;	/* XXXAR: debug environment variable to verify relocation processing */
+bool ld_sentry_disable = false;	/* Disable sentries */
 static struct obj_entry_q obj_list;	/* Queue of all loaded objects */
 static Obj_Entry *obj_main;	/* The main program shared object */
 static Obj_Entry obj_rtld;	/* The dynamic linker shared object */
@@ -400,6 +401,7 @@ enum {
 	LD_COMPARTMENT_OVERHEAD,
 	LD_COMPARTMENT_SIG,
 #endif
+	LD_SENTRY_DISABLE,
 };
 
 struct ld_env_var_desc {
@@ -444,6 +446,7 @@ static struct ld_env_var_desc ld_env_vars[] = {
 	LD_ENV_DESC(COMPARTMENT_OVERHEAD, false),
 	LD_ENV_DESC(COMPARTMENT_SIG, false),
 #endif
+	LD_ENV_DESC(SENTRY_DISABLE, true),
 };
 
 static const char *
@@ -836,6 +839,7 @@ _rtld(Elf_Addr *sp, func_ptr_type *exit_proc, Obj_Entry **objp)
     ld_compartment_overhead = ld_get_env_var(LD_COMPARTMENT_OVERHEAD);
     ld_compartment_sig = ld_get_env_var(LD_COMPARTMENT_SIG);
 #endif
+	ld_sentry_disable = ld_get_env_var(LD_SENTRY_DISABLE) != NULL;
 
     set_ld_elf_hints_path();
 #ifdef DEBUG
