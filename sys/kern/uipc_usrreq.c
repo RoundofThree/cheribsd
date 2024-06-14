@@ -2551,6 +2551,7 @@ unp_init(void *arg __unused)
 }
 SYSINIT(unp_init, SI_SUB_PROTO_DOMAIN, SI_ORDER_SECOND, unp_init, NULL);
 
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
 static void
 unp_internalize_cleanup_rights(struct mbuf *control)
 {
@@ -2569,6 +2570,7 @@ unp_internalize_cleanup_rights(struct mbuf *control)
 		unp_freerights(data, datalen / sizeof(struct filedesc *));
 	}
 }
+#endif
 
 static int
 unp_internalize(struct mbuf **controlp, struct thread *td,

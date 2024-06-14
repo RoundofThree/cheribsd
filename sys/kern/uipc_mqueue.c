@@ -2383,7 +2383,9 @@ kern_kmq_timedsend(struct thread *td, int mqd,
 	waitok = !(fp->f_flag & O_NONBLOCK);
 	error = mqueue_send(mq, msg_ptr, msg_len, msg_prio, waitok,
 	    abs_timeout);
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
 out:
+#endif
 	fdrop(fp, td);
 	return (error);
 }
