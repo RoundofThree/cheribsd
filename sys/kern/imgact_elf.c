@@ -252,7 +252,7 @@ SYSCTL_BOOL(ELF_NODE_OID, OID_AUTO, allow_wx, CTLFLAG_RWTUN,
     &__elfN(allow_wx), 0,
     "Allow pages to be mapped simultaneously writable and executable");
 
-#ifdef __ELF_CHERI
+#if __has_feature(capabilities)
 SYSCTL_NODE(ELF_NODE_OID, OID_AUTO, cheri, CTLFLAG_RW | CTLFLAG_MPSAFE, 0,
     "");
 #define	CHERI_NODE_OID	__CONCAT(ELF_NODE_OID, _cheri)
