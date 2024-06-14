@@ -2341,7 +2341,9 @@ kern_timedreceive(struct thread *td, int mqd, char * __capability msg_ptr,
 	waitok = !(fp->f_flag & O_NONBLOCK);
 	error = mqueue_receive(mq, msg_ptr, msg_len, msg_prio, waitok,
 	    abs_timeout);
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
 out:
+#endif
 	fdrop(fp, td);
 	return (error);
 }
