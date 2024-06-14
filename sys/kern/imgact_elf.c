@@ -253,12 +253,15 @@ SYSCTL_BOOL(ELF_NODE_OID, OID_AUTO, allow_wx, CTLFLAG_RWTUN,
     "Allow pages to be mapped simultaneously writable and executable");
 
 #ifdef __ELF_CHERI
+SYSCTL_NODE(ELF_NODE_OID, OID_AUTO, cheri, CTLFLAG_RW | CTLFLAG_MPSAFE, 0,
+    "");
 #define	CHERI_NODE_OID	__CONCAT(ELF_NODE_OID, _cheri)
 
 static bool __elfN(seal_entries) = true;
 SYSCTL_BOOL(CHERI_NODE_OID, OID_AUTO, seal_entries, CTLFLAG_RWTUN,
     &__elfN(seal_entries), 1,
-    "Seal entries");
+	ELF_ABI_NAME
+    ": seal entries");
 #endif
 
 static Elf_Brandinfo *elf_brand_list[MAX_BRANDS];
