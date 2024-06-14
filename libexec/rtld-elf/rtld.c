@@ -676,6 +676,10 @@ _rtld(Elf_Addr *sp, func_ptr_type *exit_proc, Obj_Entry **objp)
     trust = !issetugid();
     direct_exec = false;
 
+	if (aux_info[AT_SENTRIES] == NULL ||
+		aux_info[AT_SENTRIES]->a_un.a_val == 0)
+		ld_sentry_disable = true;
+
     md_abi_variant_hook(aux_info);
     rtld_init_env_vars(env);
 
@@ -839,7 +843,9 @@ _rtld(Elf_Addr *sp, func_ptr_type *exit_proc, Obj_Entry **objp)
     ld_compartment_overhead = ld_get_env_var(LD_COMPARTMENT_OVERHEAD);
     ld_compartment_sig = ld_get_env_var(LD_COMPARTMENT_SIG);
 #endif
-	ld_sentry_disable = ld_get_env_var(LD_SENTRY_DISABLE) != NULL;
+	// XXXR3: sentries are enabled by default but disable wins
+	if (!ld_sentry_disable)
+		ld_sentry_disable = ld_get_env_var(LD_SENTRY_DISABLE) != NULL;
 
     set_ld_elf_hints_path();
 #ifdef DEBUG

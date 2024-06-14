@@ -30,6 +30,31 @@
 #ifdef __CHERI_PURE_CAPABILITY__
 #include <cheri/cheric.h>
 
+static bool sentries;
+
+/*
+ * Read from env whether to seal entries in irelocs.
+ */
+static void
+init_cheri_features(char **env)
+{
+	const Elf_Auxinfo *aux;
+
+	/* Find the auxiliary vector on the stack. */
+	while (*env++ != 0)	/* Skip over environment, and NULL terminator */
+		;
+	aux = (const Elf_Auxinfo *)env;
+
+	/* Digest the auxiliary vector. */
+	for (;  aux->a_type != AT_NULL; aux++) {
+		switch (aux->a_type) {
+		case AT_SENTRIES:
+			sentries = (bool)aux->a_un.a_val;
+			break;
+		}
+	}
+}
+
 /*
  * Fragments consist of a 64-bit address followed by a 56-bit length and an
  * 8-bit permission field.
@@ -65,8 +90,7 @@ init_cap_from_fragment(const Elf_Addr *fragment, void * __capability data_cap,
 
 	cap += addend;
 
-	// XXXR3: TODO: tuning sealing of irelocs
-	if (perms == MORELLO_FRAG_EXECUTABLE) {
+	if (perms == MORELLO_FRAG_EXECUTABLE && sentries) {
 		/*
 		 * TODO tight bounds: lower bound and len should be set
 		 * with LSB == 0 for C64 code.
@@ -107,6 +131,16 @@ crt1_handle_rela(const Elf_Rela *r, void *data_cap, const void *code_cap)
 	}
 }
 #else
+
+/*
+ * Nothing.
+ */
+static void
+init_cheri_features(char **env __unused)
+{
+	return;
+}
+
 static void
 crt1_handle_rela(const Elf_Rela *r)
 {

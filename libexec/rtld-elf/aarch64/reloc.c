@@ -138,10 +138,15 @@ _rtld_relocate_nonplt_self(Elf_Dyn *dynp, Elf_Auxinfo *aux)
 	unsigned long relasz;
 	Elf_Addr *where;
 	void *pcc;
+	bool sentries;
 
 	for (; aux->a_type != AT_NULL; aux++) {
-		if (aux->a_type == AT_BASE) {
+		switch (aux->a_type) {
+		case AT_BASE:
 			relocbase = aux->a_un.a_ptr;
+			break;
+		case AT_SENTRIES:
+			sentries = (bool)aux->a_un.a_val;
 			break;
 		}
 	}
@@ -167,9 +172,9 @@ _rtld_relocate_nonplt_self(Elf_Dyn *dynp, Elf_Auxinfo *aux)
 			__builtin_trap();
 
 		where = (Elf_Addr *)(relocbase + rela->r_offset);
-		// XXXR3: sentries hardcoded as globals are not available yet
+		// XXXR3: LD_SENTRY_DISABLE doesn't affect rtld
 		*(uintcap_t *)where = init_cap_from_fragment(where, relocbase,
-		    pcc, (Elf_Addr)(uintptr_t)relocbase, rela->r_addend, /*sentries*/true);
+		    pcc, (Elf_Addr)(uintptr_t)relocbase, rela->r_addend, /*sentries*/sentries);
 	}
 }
 #endif /* __CHERI_PURE_CAPABILITY__ */

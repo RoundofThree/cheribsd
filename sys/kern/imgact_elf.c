@@ -252,6 +252,15 @@ SYSCTL_BOOL(ELF_NODE_OID, OID_AUTO, allow_wx, CTLFLAG_RWTUN,
     &__elfN(allow_wx), 0,
     "Allow pages to be mapped simultaneously writable and executable");
 
+#ifdef __ELF_CHERI
+#define	CHERI_NODE_OID	__CONCAT(ELF_NODE_OID, _cheri)
+
+static bool __elfN(seal_entries) = true;
+SYSCTL_BOOL(CHERI_NODE_OID, OID_AUTO, seal_entries, CTLFLAG_RWTUN,
+    &__elfN(seal_entries), 1,
+    "Seal entries");
+#endif
+
 static Elf_Brandinfo *elf_brand_list[MAX_BRANDS];
 
 #define	aligned(a, t)	(rounddown2((u_long)(a), sizeof(t)) == (u_long)(a))
@@ -1886,6 +1895,10 @@ __elfN(freebsd_copyout_auxargs)(struct image_params *imgp, uintcap_t base)
 	AUXARGS_ENTRY(pos, AT_USRSTACKBASE, round_page(vmspace->vm_stacktop));
 	stacksz = imgp->proc->p_limit->pl_rlimit[RLIMIT_STACK].rlim_cur;
 	AUXARGS_ENTRY(pos, AT_USRSTACKLIM, stacksz);
+#ifdef __ELF_CHERI
+	// XXXR3: add CHERI security tunables to AT_BSDFLAGS, maybe
+	AUXARGS_ENTRY(pos, AT_SENTRIES, __elfN(seal_entries));
+#endif
 	AUXARGS_ENTRY(pos, AT_NULL, 0);
 
 	free(imgp->auxargs, M_TEMP);
