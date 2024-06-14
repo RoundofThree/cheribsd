@@ -2574,7 +2574,11 @@ static int
 unp_internalize(struct mbuf **controlp, struct thread *td,
     struct mbuf **clast, u_int *space, u_int *mbcnt)
 {
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
 	struct mbuf *control, **initial_controlp;
+#else
+	struct mbuf *control;
+#endif
 	struct proc *p;
 	struct filedesc *fdesc;
 	struct bintime *bt;
@@ -2597,7 +2601,9 @@ unp_internalize(struct mbuf **controlp, struct thread *td,
 	error = 0;
 	control = *controlp;
 	*controlp = NULL;
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
 	initial_controlp = controlp;
+#endif
 	for (clen = control->m_len, cm = mtod(control, struct cmsghdr *),
 	    data = CMSG_DATA(cm);
 
