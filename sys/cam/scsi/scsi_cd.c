@@ -2041,7 +2041,8 @@ cdioctl(struct disk *dp, u_long cmd, void *addr, int flag, struct thread *td)
 			if (nocopyout == 0) {
 				error = copyout(data, args->data, len);
 			} else {
-				bcopy(data, args->data, len);
+				// XXXR3: args->data from SYSSPACE could be a default ABI pointer
+				bcopy(data, (__cheri_fromcap void *)args->data, len);
 			}
 #endif
 			free(data, M_SCSICD);

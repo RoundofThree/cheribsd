@@ -1522,9 +1522,9 @@ linux_ioctl_cdrom(struct thread *td, struct linux_ioctl_args *args)
 		bsdsc.address_format = CD_LBA_FORMAT;
 		bsdsc.data_format = CD_CURRENT_POSITION;
 		bsdsc.track = 0;
-		bsdsc.data_len = sizeof(bsdinfo); //
+		bsdsc.data_len = sizeof(bsdinfo);
 		bsdsc.data = &bsdinfo; // kernel address
-		error = fo_ioctl(fp, CDIOCREADSUBCHANNEL, (caddr_t)&bsdsc,
+		error = fo_ioctl(fp, CDIOCREADSUBCHANNEL_SYSSPACE, (caddr_t)&bsdsc,
 		    td->td_ucred, td);
 		if (error)
 			break;
