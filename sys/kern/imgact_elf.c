@@ -252,14 +252,14 @@ SYSCTL_BOOL(ELF_NODE_OID, OID_AUTO, allow_wx, CTLFLAG_RWTUN,
     &__elfN(allow_wx), 0,
     "Allow pages to be mapped simultaneously writable and executable");
 
-#if __has_feature(capabilities)
+#if defined(__ELF_CHERI) && __has_feature(capabilities)
 SYSCTL_NODE(ELF_NODE_OID, OID_AUTO, cheri, CTLFLAG_RW | CTLFLAG_MPSAFE, 0,
     "");
 #define	CHERI_NODE_OID	__CONCAT(ELF_NODE_OID, _cheri)
 
-static bool __elfN(seal_entries) = true;
-SYSCTL_BOOL(CHERI_NODE_OID, OID_AUTO, seal_entries, CTLFLAG_RWTUN,
-    &__elfN(seal_entries), 1,
+static int __elfN(seal_entries) = 1;
+SYSCTL_INT(CHERI_NODE_OID, OID_AUTO, seal_entries, CTLFLAG_RWTUN,
+    &__elfN(seal_entries), 0,
 	ELF_ABI_NAME
     ": seal entries");
 #endif
@@ -1900,7 +1900,9 @@ __elfN(freebsd_copyout_auxargs)(struct image_params *imgp, uintcap_t base)
 	AUXARGS_ENTRY(pos, AT_USRSTACKLIM, stacksz);
 #ifdef __ELF_CHERI
 	// XXXR3: add CHERI security tunables to AT_BSDFLAGS, maybe
-	AUXARGS_ENTRY(pos, AT_SENTRIES, __elfN(seal_entries));
+	if (__elfN(seal_entries) != 0) {
+		AUXARGS_ENTRY(pos, AT_SENTRIES, 1);
+	}
 #endif
 	AUXARGS_ENTRY(pos, AT_NULL, 0);
 

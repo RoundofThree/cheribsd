@@ -401,7 +401,9 @@ enum {
 	LD_COMPARTMENT_OVERHEAD,
 	LD_COMPARTMENT_SIG,
 #endif
+#ifdef __CHERI_PURE_CAPABILITY__
 	LD_SENTRY_DISABLE,
+#endif
 };
 
 struct ld_env_var_desc {
@@ -446,7 +448,9 @@ static struct ld_env_var_desc ld_env_vars[] = {
 	LD_ENV_DESC(COMPARTMENT_OVERHEAD, false),
 	LD_ENV_DESC(COMPARTMENT_SIG, false),
 #endif
+#ifdef __CHERI_PURE_CAPABILITY__
 	LD_ENV_DESC(SENTRY_DISABLE, true),
+#endif
 };
 
 static const char *
@@ -676,10 +680,6 @@ _rtld(Elf_Addr *sp, func_ptr_type *exit_proc, Obj_Entry **objp)
     trust = !issetugid();
     direct_exec = false;
 
-	if (aux_info[AT_SENTRIES] == NULL ||
-		aux_info[AT_SENTRIES]->a_un.a_val == 0)
-		ld_sentry_disable = true;
-
     md_abi_variant_hook(aux_info);
     rtld_init_env_vars(env);
 
@@ -843,9 +843,18 @@ _rtld(Elf_Addr *sp, func_ptr_type *exit_proc, Obj_Entry **objp)
     ld_compartment_overhead = ld_get_env_var(LD_COMPARTMENT_OVERHEAD);
     ld_compartment_sig = ld_get_env_var(LD_COMPARTMENT_SIG);
 #endif
+
+#ifdef __CHERI_PURE_CAPABILITY__
 	// XXXR3: sentries are enabled by default but disable wins
-	if (!ld_sentry_disable)
+	if (aux_info[AT_SENTRIES] == NULL ||
+		aux_info[AT_SENTRIES]->a_un.a_val == 0)
+		ld_sentry_disable = true;
+	// XXXR3: TODO: if auxv says to disable sentries, we'll add an envvar to disable it
+	// because the libc csu cannot read auxv
+	if (!ld_sentry_disable) {
 		ld_sentry_disable = ld_get_env_var(LD_SENTRY_DISABLE) != NULL;
+	}	
+#endif
 
     set_ld_elf_hints_path();
 #ifdef DEBUG

@@ -30,7 +30,7 @@
 #ifdef __CHERI_PURE_CAPABILITY__
 #include <cheri/cheric.h>
 
-static bool sentries;
+static bool sentries = true;  /* Sentries are enabled by default */
 
 /*
  * Read from env whether to seal entries in irelocs.
@@ -38,18 +38,25 @@ static bool sentries;
 static void
 init_cheri_features(char **env)
 {
-	const Elf_Auxinfo *aux;
+	const char *ld_sentry_disable = "LD_SENTRY_DISABLE=";
+	char **m, *n;
+	size_t j;
 
-	/* Find the auxiliary vector on the stack. */
-	while (*env++ != 0)	/* Skip over environment, and NULL terminator */
-		;
-	aux = (const Elf_Auxinfo *)env;
-
-	/* Digest the auxiliary vector. */
-	for (;  aux->a_type != AT_NULL; aux++) {
-		switch (aux->a_type) {
-		case AT_SENTRIES:
-			sentries = (bool)aux->a_un.a_val;
+	/* The auxiliary vector is not on the stack in CHERI, we can
+	 * only read environment variables.
+	 */
+	for (m = env; *m != NULL; m++) {
+		n = *m;
+		for (j = 0; ld_sentry_disable[j] != '\0'; j++) {
+			if (n[j] != ld_sentry_disable[j]) {
+				break;
+			}
+		}
+		if (ld_sentry_disable[j] == '\0') {
+			// match found
+			if (n[j] != '\0' && n[j] != '0') {
+				sentries = false;
+			}
 			break;
 		}
 	}

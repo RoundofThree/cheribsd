@@ -138,7 +138,7 @@ _rtld_relocate_nonplt_self(Elf_Dyn *dynp, Elf_Auxinfo *aux)
 	unsigned long relasz;
 	Elf_Addr *where;
 	void *pcc;
-	bool sentries;
+	bool sentries = false;
 
 	for (; aux->a_type != AT_NULL; aux++) {
 		switch (aux->a_type) {
@@ -146,7 +146,7 @@ _rtld_relocate_nonplt_self(Elf_Dyn *dynp, Elf_Auxinfo *aux)
 			relocbase = aux->a_un.a_ptr;
 			break;
 		case AT_SENTRIES:
-			sentries = (bool)aux->a_un.a_val;
+			sentries = (aux->a_un.a_val != 0);
 			break;
 		}
 	}
