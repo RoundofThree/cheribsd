@@ -1335,6 +1335,7 @@ kern_jail_set(struct thread *td, struct uio *optuio, int flags)
 			    "osrelease cannot be changed after creation");
 			goto done_errmsg;
 		}
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
 		if (len == 0 || osrelstr[len - 1] != '\0') {
 			error = EINVAL;
 			goto done_free;
@@ -1346,6 +1347,15 @@ kern_jail_set(struct thread *td, struct uio *optuio, int flags)
 			    OSRELEASELEN - 1);
 			goto done_errmsg;
 		}
+#else
+		if (len == 0 || len >= OSRELEASELEN) {
+			error = EINVAL;
+			vfs_opterror(opts,
+			    "osrelease string must be 1-%d bytes long",
+			    OSRELEASELEN - 1);
+			goto done_errmsg;
+		}
+#endif /* ENABLE_PAST_LOCAL_VULNERABILITIES */
 	}
 
 	error = vfs_copyopt(opts, "osreldate", &osreldt, sizeof(osreldt));
@@ -1679,12 +1689,19 @@ kern_jail_set(struct thread *td, struct uio *optuio, int flags)
 		pr->pr_devfs_rsnum = ppr->pr_devfs_rsnum;
 
 		pr->pr_osreldate = osreldt ? osreldt : ppr->pr_osreldate;
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
 		if (osrelstr == NULL)
 			strlcpy(pr->pr_osrelease, ppr->pr_osrelease,
 			    sizeof(pr->pr_osrelease));
 		else
 			strlcpy(pr->pr_osrelease, osrelstr,
 			    sizeof(pr->pr_osrelease));
+#else
+		if (osrelstr == NULL)
+			strcpy(pr->pr_osrelease, ppr->pr_osrelease);
+		else
+			strcpy(pr->pr_osrelease, osrelstr);
+#endif /* ENABLE_PAST_LOCAL_VULNERABILITIES */
 
 #ifdef VIMAGE
 		/* Allocate a new vnet if specified. */

@@ -2445,8 +2445,13 @@ do {								\
 
 			case O_TCPOPTS:
 				if (proto == IPPROTO_TCP && offset == 0 && ulp){
+#ifndef ENABLE_PAST_REMOTE_VULNERABILITIES
 					PULLUP_LEN_LOCKED(hlen, ulp,
 					    (TCP(ulp)->th_off << 2));
+#else
+					PULLUP_LEN(hlen, ulp,
+					    (TCP(ulp)->th_off << 2));
+#endif
 					match = tcpopts_match(TCP(ulp), cmd);
 				}
 				break;
@@ -2469,9 +2474,13 @@ do {								\
 				    ulp != NULL) {
 					uint16_t mss, *p;
 					int i;
-
+#ifndef ENABLE_PAST_REMOTE_VULNERABILITIES
 					PULLUP_LEN_LOCKED(hlen, ulp,
 					    (TCP(ulp)->th_off << 2));
+#else
+					PULLUP_LEN(hlen, ulp,
+					    (TCP(ulp)->th_off << 2));
+#endif
 					if ((tcpopts_parse(TCP(ulp), &mss) &
 					    IP_FW_TCPOPT_MSS) == 0)
 						break;

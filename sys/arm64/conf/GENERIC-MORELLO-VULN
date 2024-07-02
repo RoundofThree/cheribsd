@@ -1,0 +1,7 @@
+include	"GENERIC-MORELLO"
+include "../../conf/std.nodebug"
+
+ident	GENERIC-MORELLO-VULN
+
+options 	ENABLE_PAST_LOCAL_VULNERABILITIES
+options     ENABLE_PAST_REMOTE_VULNERABILITIES

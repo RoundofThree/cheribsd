@@ -306,7 +306,7 @@ fastfind
 			    || TOLOWER(*s) == cc
 #endif /* FF_ICASE */
 			    ) {	/* fast first char check */
-				for (p = patend - 1, q = s - 1; *p != '\0';
+				for (p = patend - 1, q = s - 1; *p != '\0' && q >= path;
 				     p--, q--)
 					if (*q != *p
 #ifdef FF_ICASE

@@ -102,8 +102,10 @@ make_code_cap(const Elf_Sym *def, const struct Struct_Obj_Entry *defobj,
 	 * for catch blocks point to the middle of a function.
 	 */
 	ret = cheri_incoffset(ret, addend);
-	/* All code pointers should be sentries: */
-	ret = __builtin_cheri_seal_entry(ret);
+	if (!ld_sentry_disable) {
+		/* All code pointers should be sentries: */
+		ret = __builtin_cheri_seal_entry(ret);
+	}
 	return __DECONST_CAP(dlfunc_t __capability, ret);
 }
 

@@ -1773,6 +1773,9 @@ cdioctl(struct disk *dp, u_long cmd, void *addr, int flag, struct thread *td)
 	struct 	cam_periph *periph;
 	struct	cd_softc *softc;
 	int	error = 0;
+#ifdef ENABLE_PAST_LOCAL_VULNERABILITIES
+	int nocopyout = 0;
+#endif
 
 	periph = (struct cam_periph *)dp->d_drv1;
 	cam_periph_lock(periph);
@@ -1983,6 +1986,10 @@ cdioctl(struct disk *dp, u_long cmd, void *addr, int flag, struct thread *td)
 			cam_periph_unlock(periph);
 		}
 		break;
+#ifdef ENABLE_PAST_LOCAL_VULNERABILITIES
+	case CDIOCREADSUBCHANNEL_SYSSPACE:
+		nocopyout = 1;
+#endif
 	case CDIOCREADSUBCHANNEL:
 		{
 			struct ioc_read_subchannel *args
@@ -2027,7 +2034,16 @@ cdioctl(struct disk *dp, u_long cmd, void *addr, int flag, struct thread *td)
 				data->header.data_len[1] +
 				sizeof(struct cd_sub_channel_header)));
 			cam_periph_unlock(periph);
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
 			error = copyout(data, args->data, len);
+#else
+			if (nocopyout == 0) {
+				error = copyout(data, args->data, len);
+			} else {
+				// XXXR3: args->data from SYSSPACE could be a default ABI pointer
+				bcopy(data, (__cheri_fromcap void *)args->data, len);
+			}
+#endif
 			free(data, M_SCSICD);
 		}
 		break;

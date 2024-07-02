@@ -912,8 +912,9 @@ bridge_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 			error = EINVAL;
 			break;
 		}
-
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
 		bzero(&args, sizeof(args));
+#endif
 		if (bc->bc_flags & BC_F_COPYIN) {
 			error = copyin(ifd->ifd_data, &args, ifd->ifd_len);
 			if (error)
@@ -1508,7 +1509,9 @@ bridge_ioctl_gifs(struct bridge_softc *sc, void *arg)
 	count = 0;
 	buf = outbuf;
 	len = min(bifc->ifbic_len, buflen);
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
 	bzero(&breq, sizeof(breq));
+#endif
 	CK_LIST_FOREACH(bif, &sc->sc_iflist, bif_next) {
 		if (len < sizeof(breq))
 			break;
@@ -1568,7 +1571,9 @@ bridge_ioctl_rts(struct bridge_softc *sc, void *arg)
 	count = 0;
 	buf = outbuf;
 	len = min(bac->ifbac_len, buflen);
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
 	bzero(&bareq, sizeof(bareq));
+#endif
 	CK_LIST_FOREACH(brt, &sc->sc_rtlist, brt_list) {
 		if (len < sizeof(bareq))
 			goto out;

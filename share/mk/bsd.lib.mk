@@ -120,6 +120,16 @@ CXXFLAGS+= -enable-trivial-auto-var-init-zero-knowing-it-will-be-removed-from-cl
 .endif
 .endif
 
+# Enable seleted past vulnerabilities for research purposes
+.if ${MK_ENABLE_PAST_LOCAL_VULNERABILITIES} == "yes"
+CFLAGS+= -DENABLE_PAST_LOCAL_VULNERABILITIES
+CXXFLAGS+= -DENABLE_PAST_LOCAL_VULNERABILITIES
+.endif
+.if ${MK_ENABLE_PAST_REMOTE_VULNERABILITIES} == "yes"
+CFLAGS+= -DENABLE_PAST_REMOTE_VULNERABILITIES
+CXXFLAGS+= -DENABLE_PAST_REMOTE_VULNERABILITIES
+.endif
+
 # bsd.sanitizer.mk is not installed, so don't require it (e.g. for ports).
 .sinclude "bsd.sanitizer.mk"
 

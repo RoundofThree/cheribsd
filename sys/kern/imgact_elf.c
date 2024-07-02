@@ -252,6 +252,18 @@ SYSCTL_BOOL(ELF_NODE_OID, OID_AUTO, allow_wx, CTLFLAG_RWTUN,
     &__elfN(allow_wx), 0,
     "Allow pages to be mapped simultaneously writable and executable");
 
+#if defined(__ELF_CHERI) && __has_feature(capabilities)
+SYSCTL_NODE(ELF_NODE_OID, OID_AUTO, cheri, CTLFLAG_RW | CTLFLAG_MPSAFE, 0,
+    "");
+#define	CHERI_NODE_OID	__CONCAT(ELF_NODE_OID, _cheri)
+
+static int __elfN(seal_entries) = 1;
+SYSCTL_INT(CHERI_NODE_OID, OID_AUTO, seal_entries, CTLFLAG_RWTUN,
+    &__elfN(seal_entries), 0,
+	ELF_ABI_NAME
+    ": seal entries");
+#endif
+
 static Elf_Brandinfo *elf_brand_list[MAX_BRANDS];
 
 #define	aligned(a, t)	(rounddown2((u_long)(a), sizeof(t)) == (u_long)(a))
@@ -1913,6 +1925,12 @@ __elfN(freebsd_copyout_auxargs)(struct image_params *imgp, uintcap_t base)
 	stacksz = imgp->proc->p_limit->pl_rlimit[RLIMIT_STACK].rlim_cur;
 	AUXARGS_ENTRY(pos, AT_USRSTACKLIM, stacksz);
 	AUXARGS_ENTRY_PTR(pos, AT_CHERI_C18N, imgp->c18n_info);
+#ifdef __ELF_CHERI
+	// XXXR3: add CHERI security tunables to AT_BSDFLAGS, maybe
+	if (__elfN(seal_entries) != 0) {
+		AUXARGS_ENTRY(pos, AT_SENTRIES, 1);
+	}
+#endif
 	AUXARGS_ENTRY(pos, AT_NULL, 0);
 
 	free(imgp->auxargs, M_TEMP);
@@ -2712,21 +2730,31 @@ __elfN(note_prpsinfo)(void *arg, struct sbuf *sb, size_t *sizep)
 			error = proc_getargv(curthread, p, &sbarg);
 			PRELE(p);
 			if (sbuf_finish(&sbarg) == 0) {
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
 				len = sbuf_len(&sbarg);
 				if (len > 0)
 					len--;
+#else
+				len = sbuf_len(&sbarg) - 1;
+#endif
 			} else {
 				len = sizeof(psinfo->pr_psargs) - 1;
 			}
 			sbuf_delete(&sbarg);
 		}
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
 		if (error != 0 || len == 0 || (ssize_t)len == -1)
+#else
+		if (error != 0 || len == 0)
+#endif
 			strlcpy(psinfo->pr_psargs, p->p_comm,
 			    sizeof(psinfo->pr_psargs));
 		else {
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
 			KASSERT(len < sizeof(psinfo->pr_psargs),
 			    ("len is too long: %zu vs %zu", len,
 			    sizeof(psinfo->pr_psargs)));
+#endif
 			cp = psinfo->pr_psargs;
 			end = cp + len - 1;
 			for (;;) {
