@@ -435,7 +435,11 @@ cse_create(struct fcrypt *fcr, struct session2_op *sop)
 	}
 
 	if (thash != NULL) {
+#ifndef ENABLE_PAST_REMOTE_VULNERABILITIES
 		if (sop->mackeylen > thash->keysize || sop->mackeylen < 0) {
+#else
+		if (sop->mackeylen > thash->keysize && sop->mackeylen != 0) {
+#endif
 			CRYPTDEB("invalid mac key length");
 			error = EINVAL;
 			SDT_PROBE1(opencrypto, dev, ioctl, error, __LINE__);

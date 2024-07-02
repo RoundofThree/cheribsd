@@ -235,6 +235,7 @@ static const char *ld_elf_hints_path;	/* Environment variable for alternative hi
 static const char *ld_tracing;	/* Called from ldd to print libs */
 static const char *ld_utrace;	/* Use utrace() to log events. */
 static bool ld_skip_init_funcs = false;	/* XXXAR: debug environment variable to verify relocation processing */
+bool ld_sentry_disable = false;	/* Disable sentries */
 static struct obj_entry_q obj_list;	/* Queue of all loaded objects */
 static Obj_Entry *obj_main;	/* The main program shared object */
 static Obj_Entry obj_rtld;	/* The dynamic linker shared object */
@@ -407,6 +408,9 @@ enum {
 	LD_COMPARTMENT_STATS,
 	LD_COMPARTMENT_SWITCH_COUNT,
 #endif
+#ifdef __CHERI_PURE_CAPABILITY__
+	LD_SENTRY_DISABLE,
+#endif
 };
 
 struct ld_env_var_desc {
@@ -456,6 +460,9 @@ static struct ld_env_var_desc ld_env_vars[] = {
 	LD_ENV_DESC(COMPARTMENT_UNWIND, false),
 	LD_ENV_DESC(COMPARTMENT_STATS, false),
 	LD_ENV_DESC(COMPARTMENT_SWITCH_COUNT, false),
+#endif
+#ifdef __CHERI_PURE_CAPABILITY__
+	LD_ENV_DESC(SENTRY_DISABLE, true),
 #endif
 };
 
@@ -875,6 +882,18 @@ _rtld(Elf_Addr *sp, func_ptr_type *exit_proc, Obj_Entry **objp)
 	ld_standard_library_path = STANDARD_LIBRARY_PATH_C18N;
 	c18n_code_perm_clear = CHERI_PERM_EXECUTIVE;
     }
+#endif
+
+#ifdef __CHERI_PURE_CAPABILITY__
+	// XXXR3: sentries are enabled by default but disable wins
+	if (aux_info[AT_SENTRIES] == NULL ||
+		aux_info[AT_SENTRIES]->a_un.a_val == 0)
+		ld_sentry_disable = true;
+	// XXXR3: TODO: if auxv says to disable sentries, we'll add an envvar to disable it
+	// because the libc csu cannot read auxv
+	if (!ld_sentry_disable) {
+		ld_sentry_disable = ld_get_env_var(LD_SENTRY_DISABLE) != NULL;
+	}	
 #endif
 
     set_ld_elf_hints_path();

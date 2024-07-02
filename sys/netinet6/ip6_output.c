@@ -1680,10 +1680,15 @@ ip6_ctloutput(struct socket *so, struct sockopt *sopt)
 				error = soopt_mcopyin(sopt, m); /* XXX */
 				if (error != 0)
 					break;
+#ifndef ENABLE_PAST_REMOTE_VULNERABILITIES
 				INP_WLOCK(inp);
 				error = ip6_pcbopts(&inp->in6p_outputopts, m,
 				    so, sopt);
 				INP_WUNLOCK(inp);
+#else
+				error = ip6_pcbopts(&inp->in6p_outputopts, m,
+				    so, sopt);
+#endif
 				m_freem(m); /* XXX */
 				break;
 			}
@@ -2454,9 +2459,13 @@ ip6_pcbopts(struct ip6_pktopts **pktopt, struct mbuf *m,
 #endif
 		ip6_clearpktopts(opt, -1);
 	} else {
+#ifndef ENABLE_PAST_REMOTE_VULNERABILITIES
 		opt = malloc(sizeof(*opt), M_IP6OPT, M_NOWAIT);
 		if (opt == NULL)
 			return (ENOMEM);
+#else
+		opt = malloc(sizeof(*opt), M_IP6OPT, M_WAITOK);
+#endif
 	}
 	*pktopt = NULL;
 

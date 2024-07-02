@@ -1599,7 +1599,9 @@ m_dispose_extcontrolm(struct mbuf *m)
 					    &fp);
 					if (error == 0) {
 						fdclose(td, fp, fd);
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
 						fdrop(fp, td);
+#endif
 					}
 				}
 			}

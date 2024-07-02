@@ -89,7 +89,7 @@ init_pltgot(Obj_Entry *obj)
 static uintcap_t
 init_cap_from_fragment(const Elf_Addr *fragment, void * __capability data_cap,
     const void * __capability text_rodata_cap, Elf_Addr base_addr,
-    Elf_Size addend)
+    Elf_Size addend, bool sentries)
 {
 	uintcap_t cap;
 	Elf_Addr address, len;
@@ -114,7 +114,7 @@ init_cap_from_fragment(const Elf_Addr *fragment, void * __capability data_cap,
 
 	cap += addend;
 
-	if (perms == MORELLO_FRAG_EXECUTABLE) {
+	if (perms == MORELLO_FRAG_EXECUTABLE && sentries) {
 		/*
 		 * TODO tight bounds: lower bound and len should be set
 		 * with LSB == 0 for C64 code.
@@ -143,10 +143,15 @@ _rtld_relocate_nonplt_self(Elf_Dyn *dynp, Elf_Auxinfo *aux)
 	unsigned long relasz;
 	Elf_Addr *where;
 	void *pcc;
+	bool sentries = false;
 
 	for (; aux->a_type != AT_NULL; aux++) {
-		if (aux->a_type == AT_BASE) {
+		switch (aux->a_type) {
+		case AT_BASE:
 			relocbase = aux->a_un.a_ptr;
+			break;
+		case AT_SENTRIES:
+			sentries = (aux->a_un.a_val != 0);
 			break;
 		}
 	}
@@ -172,8 +177,9 @@ _rtld_relocate_nonplt_self(Elf_Dyn *dynp, Elf_Auxinfo *aux)
 			__builtin_trap();
 
 		where = (Elf_Addr *)(relocbase + rela->r_offset);
+		// XXXR3: LD_SENTRY_DISABLE doesn't affect rtld
 		*(uintcap_t *)where = init_cap_from_fragment(where, relocbase,
-		    pcc, (Elf_Addr)(uintptr_t)relocbase, rela->r_addend);
+		    pcc, (Elf_Addr)(uintptr_t)relocbase, rela->r_addend, /*sentries*/sentries);
 	}
 }
 #endif /* __CHERI_PURE_CAPABILITY__ */
@@ -387,14 +393,19 @@ reloc_plt(Obj_Entry *obj, int flags, RtldLockState *lockstate)
 			 * the new ABI is old enough that we can assume it is
 			 * in use.
 			 */
-			if (fragment[1] == 0)
-				*where = cheri_sealentry(jump_slot_base +
-				    fragment[0]);
-			else
+			if (fragment[1] == 0) {
+				if (!ld_sentry_disable) {
+					*where = cheri_sealentry(jump_slot_base +
+						fragment[0]);
+				} else {
+					*where = jump_slot_base + fragment[0];
+				}
+			} else {
 				*where = init_cap_from_fragment(fragment,
 				    obj->relocbase, obj->text_rodata_cap,
 				    (Elf_Addr)(uintptr_t)obj->relocbase,
-				    rela->r_addend);
+				    rela->r_addend, /*sentries*/!ld_sentry_disable);
+			}
 			break;
 #else
 		case R_AARCH64_JUMP_SLOT:
@@ -520,7 +531,7 @@ reloc_iresolve_one(Obj_Entry *obj, const Elf_Rela *rela,
 		ptr = init_cap_from_fragment(fragment, obj->relocbase,
 		    obj->text_rodata_cap,
 		    (Elf_Addr)(uintptr_t)obj->relocbase,
-		    rela->r_addend);
+		    rela->r_addend, /*sentries*/!ld_sentry_disable);
 #else
 	ptr = (uintptr_t)(obj->relocbase + rela->r_addend);
 #endif
@@ -783,7 +794,7 @@ reloc_non_plt(Obj_Entry *obj, Obj_Entry *obj_rtld, int flags,
 			    init_cap_from_fragment(where, data_cap,
 				text_rodata_cap,
 				(Elf_Addr)(uintptr_t)obj->relocbase,
-				rela->r_addend);
+				rela->r_addend, /*sentries*/!ld_sentry_disable);
 			break;
 #endif /* __has_feature(capabilities) */
 		case R_AARCH64_ABS64:

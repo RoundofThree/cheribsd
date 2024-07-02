@@ -1497,6 +1497,7 @@ linux_ioctl_cdrom(struct thread *td, struct linux_ioctl_args *args)
 		struct ioc_read_subchannel bsdsc;
 		struct cd_sub_channel_info bsdinfo;
 
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
 		error = copyin((void *)args->arg, &sc, sizeof(sc));
 		if (error)
 			break;
@@ -1517,6 +1518,18 @@ linux_ioctl_cdrom(struct thread *td, struct linux_ioctl_args *args)
 		if (error)
 			break;
 		error = copyin((void *)args->arg, &bsdinfo, sizeof(bsdinfo));
+#else
+		bsdsc.address_format = CD_LBA_FORMAT;
+		bsdsc.data_format = CD_CURRENT_POSITION;
+		bsdsc.track = 0;
+		bsdsc.data_len = sizeof(bsdinfo);
+		bsdsc.data = &bsdinfo; // kernel address
+		error = fo_ioctl(fp, CDIOCREADSUBCHANNEL_SYSSPACE, (caddr_t)&bsdsc,
+		    td->td_ucred, td);
+		if (error)
+			break;
+		error = copyin((void *)args->arg, &sc, sizeof(sc));
+#endif /* ENABLE_PAST_LOCAL_VULNERABILITIES */
 		if (error)
 			break;
 		sc.cdsc_audiostatus = bsdinfo.header.audio_status;

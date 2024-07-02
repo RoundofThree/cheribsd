@@ -400,6 +400,10 @@ ip6_input_hbh(struct mbuf **mp, uint32_t *plen, uint32_t *rtalert, int *off,
 	struct ip6_hdr *ip6;
 	struct ip6_hbh *hbh;
 
+#ifdef ENABLE_PAST_REMOTE_VULNERABILITIES
+	struct mbuf *m_old = *mp;
+#endif
+
 	if (ip6_hopopts_input(plen, rtalert, mp, off)) {
 #if 0	/*touches NULL pointer*/
 		in6_ifstat_inc((*mp)->m_pkthdr.rcvif, ifs6_in_discard);
@@ -410,6 +414,9 @@ ip6_input_hbh(struct mbuf **mp, uint32_t *plen, uint32_t *rtalert, int *off,
 	/* adjust pointer */
 	m = *mp;
 	ip6 = mtod(m, struct ip6_hdr *);
+#ifdef ENABLE_PAST_REMOTE_VULNERABILITIES
+	*mp = m_old;
+#endif
 
 	/*
 	 * if the payload length field is 0 and the next header field

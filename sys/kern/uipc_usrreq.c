@@ -2570,6 +2570,7 @@ unp_init(void *arg __unused)
 }
 SYSINIT(unp_init, SI_SUB_PROTO_DOMAIN, SI_ORDER_SECOND, unp_init, NULL);
 
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
 static void
 unp_internalize_cleanup_rights(struct mbuf *control)
 {
@@ -2588,12 +2589,17 @@ unp_internalize_cleanup_rights(struct mbuf *control)
 		unp_freerights(data, datalen / sizeof(struct filedesc *));
 	}
 }
+#endif
 
 static int
 unp_internalize(struct mbuf **controlp, struct thread *td,
     struct mbuf **clast, u_int *space, u_int *mbcnt)
 {
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
 	struct mbuf *control, **initial_controlp;
+#else
+	struct mbuf *control;
+#endif
 	struct proc *p;
 	struct filedesc *fdesc;
 	struct bintime *bt;
@@ -2616,7 +2622,9 @@ unp_internalize(struct mbuf **controlp, struct thread *td,
 	error = 0;
 	control = *controlp;
 	*controlp = NULL;
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
 	initial_controlp = controlp;
+#endif
 	for (clen = control->m_len, cm = mtod(control, struct cmsghdr *),
 	    data = CMSG_DATA(cm);
 
@@ -2767,8 +2775,10 @@ unp_internalize(struct mbuf **controlp, struct thread *td,
 		error = EINVAL;
 
 out:
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
 	if (error != 0 && initial_controlp != NULL)
 		unp_internalize_cleanup_rights(*initial_controlp);
+#endif
 	m_freem(control);
 	return (error);
 }

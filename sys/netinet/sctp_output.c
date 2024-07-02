@@ -13232,12 +13232,16 @@ skip_preblock:
 #endif
 				goto do_a_copy_in;
 			}
+#ifndef ENABLE_PAST_LOCAL_VULNERABILITIES
 			if (sp->processing != 0) {
 				error = EINVAL;
 				goto out;
 			} else {
 				sp->processing = 1;
 			}
+#else
+			sp->processing = 1;  // XXXR3: the bug is not to goto out when sp->processing was already 1
+#endif
 		}
 
 		KASSERT(stcb != NULL, ("stcb is NULL"));
@@ -13266,13 +13270,13 @@ skip_preblock:
 				mm = sctp_copy_resume(uio, (int)max_len, user_marks_eor, &error, &sndout, &new_tail);
 				SCTP_TCB_LOCK(stcb);
 				if ((asoc->state & SCTP_STATE_ABOUT_TO_BE_FREED) ||
-				    (asoc->state & SCTP_STATE_WAS_ABORTED)) {
+				    (asoc->state & SCTP_STATE_WAS_ABORTED)) { // XXXR3
 					/*
 					 * We need to get out. Peer probably
 					 * aborted.
 					 */
 					sctp_m_freem(mm);
-					if (asoc->state & SCTP_STATE_WAS_ABORTED) {
+					if (asoc->state & SCTP_STATE_WAS_ABORTED) { // XXXR3
 						/*
 						 * XXX: Could also be
 						 * ECONNABORTED, not enough
