@@ -23,28 +23,23 @@ jobs:
         cat >>/tmp/ipsec.conf <<END
         config setup
 
-        conn CAM
-          keyexchange=ikev2
-          ikelifetime=60m
-          keylife=20m
-          rekeymargin=3m
-          keyingtries=1
-          eap_identity=%any
-          reauth=no 
-          left=%any
-          leftid=$USERNAME
-          leftauth=eap
-          leftsourceip=%config
-          leftfirewall=yes 
-          right="vpn2.cl.cam.ac.uk"
-          rightid="C=GB, ST=Cambridgeshire, O=University of Cambridge, CN=vpn2.cl.cam.ac.uk"
-          rightca="C=US, ST=New Jersey, L=Jersey City, O=The USERTRUST Network, CN=USERTrust RSA Certification Authority"
-          rightsubnet=0.0.0.0/0
-          auto=add
-        
-        ca AAA
-          cacert=/etc/ssl/certs/Comodo_AAA_Services_root.pem
-          auto=add
+        conn CL
+            keyexchange=ikev2
+            reauth=no
+            left=%any
+            leftid="$USERNAME"
+            leftauth=eap
+            leftsourceip=%config4,%config6
+            leftfirewall=yes
+            right="vpn2.cl.cam.ac.uk"
+            rightid=%any
+            rightsendcert=never
+            rightsubnet=128.232.0.0/16,129.169.0.0/16,131.111.0.0/16,192.18.195.0/24,193.60.80.0/20,193.63.252.0/23,172.16.0.0/13,172.24.0.0/14,172.28.0.0/15,172.30.0.0/16,10.128.0.0/9,10.64.0.0/10,2001:630:210::/44,2a05:b400::/32
+            auto=add
+
+        ca usertrust
+            cacert=/etc/ssl/certs/USERTrust_RSA_Certification_Authority.pem
+            auto=add
         END
         sudo cp /tmp/ipsec.conf /etc/ipsec.conf
         cat >>/tmp/ipsec.secrets <<END
@@ -53,7 +48,7 @@ jobs:
         sudo cp /tmp/ipsec.secrets /etc/ipsec.secrets
         sudo ipsec restart
         sleep 5
-        sudo ipsec up CAM
+        sudo ipsec up CL
       env:
         USERNAME: ${{ secrets.UID_USERNAME }}
         TOKEN: ${{ secrets.UID_TOKEN }}
