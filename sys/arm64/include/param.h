@@ -113,7 +113,9 @@
 #define	MAXPAGESIZES	3		/* maximum number of supported page sizes */
 
 #ifndef KSTACK_PAGES
-#ifdef __CHERI_PURE_CAPABILITY__
+#ifdef COVERAGE
+#define KSTACK_PAGES    6
+#elif defined(__CHERI_PURE_CAPABILITY__)
 #define	KSTACK_PAGES	5	/* pages of kernel stack (with pcb) */
 #elif defined(KASAN) || defined(KMSAN)
 #define	KSTACK_PAGES	6
