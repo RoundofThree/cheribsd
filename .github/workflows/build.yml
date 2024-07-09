@@ -80,7 +80,7 @@ jobs:
 
     - name: Run build scripts
       run: |
-        ssh amoracia '~/build-cheribsd-syzkaller.sh'
+        ssh amoracia '~/build-cheribsd-syzkaller.sh $GITHUB_SHA'
 
     - name: Fetch build artifacts
       run: |
