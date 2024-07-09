@@ -80,7 +80,10 @@ jobs:
 
     - name: Run build scripts
       run: |
-        ssh amoracia "~/build-cheribsd-syzkaller.sh $GITHUB_SHA"
+        echo "Will be using commit $RELEVANT_SHA"
+        ssh amoracia "~/build-cheribsd-syzkaller.sh $RELEVANT_SHA"
+      env:
+        RELEVANT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 
     - name: Fetch build artifacts
       run: |
