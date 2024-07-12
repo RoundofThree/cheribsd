@@ -31,4 +31,6 @@ void (*cheribsdtest_dynamic_get_dummy_fptr(void))(void);
 
 void * __capability cheribsdtest_dynamic_identity_cap(void * __capability cap);
 
+int cheribsdtest_dynamic_ifunc(void);
+
 #endif

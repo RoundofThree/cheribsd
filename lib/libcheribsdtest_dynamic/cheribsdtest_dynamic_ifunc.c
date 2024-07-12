@@ -1,8 +1,12 @@
 /*-
  * SPDX-License-Identifier: BSD-2-Clause
  *
- * Copyright (c) 2024 Zhuo Ying Jiang Li <zyj20@cl.cam.ac.uk>
- * All rights reserved.
+ * Copyright (c) 2024 Dapeng Gao
+ *
+ * This software was developed by the University of Cambridge Computer
+ * Laboratory (Department of Computer Science and Technology) under Innovate
+ * UK project 105694, "Digital Security by Design (DSbD) Technology Platform
+ * Prototype".
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,35 +30,19 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#define ACCEPT_FILTER_MOD
+#include <sys/types.h>
 
-#include <sys/param.h>
-#include <sys/kernel.h>
-#include <sys/module.h>
-#include <sys/sysctl.h>
-#include <sys/signalvar.h>
-#include <sys/socketvar.h>
+#include <machine/ifunc.h>
 
-/* accept filter that has a accf_create callback for research purposes */
-
-static int	sovulnfiltcb(struct socket *so, void *arg, int waitflag);
-static void * sovulnfiltcreate(struct socket *so, char *arg);
-
-ACCEPT_FILTER_DEFINE(accf_vuln, "vulnaccf", sovulnfiltcb, sovulnfiltcreate, NULL, 1);
+#include "cheribsdtest_dynamic.h"
 
 static int
-sovulnfiltcb(struct socket *so, void *arg, int waitflag)
+cheribsdtest_dynamic_ifunc_impl(void)
 {
-
-	if (!soreadable(so))
-		return (SU_OK);
-
-	return (SU_ISCONNECTED);
+        return (42);
 }
 
-static void *
-sovulnfiltcreate(struct socket *so, char *arg)
+DEFINE_UIFUNC(, int, cheribsdtest_dynamic_ifunc, (void))
 {
-    return (void*)0x1337;
+	return (cheribsdtest_dynamic_ifunc_impl);
 }
