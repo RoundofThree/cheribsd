@@ -9,6 +9,7 @@ ident		GENERIC-MORELLO-PURECAP-SYZKALLER
 
 options 	COVERAGE
 options 	KCOV
+options     KASAN
 
 # Netgraph and related modules
 options     NETGRAPH
