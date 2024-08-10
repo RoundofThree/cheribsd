@@ -314,13 +314,21 @@ virtdone:
 
 #ifdef KASAN
 	/* Save bootparams */
+#ifdef __CHERI_PURE_CAPABILITY__
+	mov	c19, c0
+#else
 	mov	x19, x0
+#endif
 
 	/* Bootstrap an early shadow map for the boot stack. */
 	bl	pmap_san_bootstrap
 
 	/* Restore bootparams */
-	mov	x0, x19
+#ifdef __CHERI_PURE_CAPABILITY__
+	mov	c0, c19
+#else
+	mov x0, x19
+#endif
 #endif
 
 	/* trace back starts here */

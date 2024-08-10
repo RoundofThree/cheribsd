@@ -165,6 +165,12 @@
 #define	KASAN_MIN_ADDRESS	(0xffff008000000000UL)
 #define	KASAN_MAX_ADDRESS	(0xffff00a000000000UL)
 
+#ifdef __CHERI_PURE_CAPABILITY__
+#define	KASAN_BASE kasan_base_cap
+#else
+#define	KASAN_BASE (void *)KASAN_MIN_ADDRESS
+#endif
+
 /* The address bits that hold a pointer authentication code */
 #define	PAC_ADDR_MASK		(0xff7f000000000000UL)
 
@@ -274,6 +280,7 @@ extern vm_paddr_t dmap_phys_max;
 extern vm_offset_t dmap_max_addr;
 #ifdef __CHERI_PURE_CAPABILITY__
 extern void *dmap_base_cap;
+extern void *kasan_base_cap;
 #endif
 extern vm_offset_t vm_max_kernel_address;
 

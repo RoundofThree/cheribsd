@@ -38,11 +38,11 @@
 #include <vm/vm_page.h>
 #include <machine/vmparam.h>
 
-static inline vm_offset_t
+static inline vm_pointer_t
 kasan_md_addr_to_shad(vm_offset_t addr)
 {
-	return (((addr - VM_MIN_KERNEL_ADDRESS) >> KASAN_SHADOW_SCALE_SHIFT) +
-	    KASAN_MIN_ADDRESS);
+	return ((vm_pointer_t)KASAN_BASE + 
+		((addr - VM_MIN_KERNEL_ADDRESS) >> KASAN_SHADOW_SCALE_SHIFT));
 }
 
 static inline bool
@@ -58,9 +58,8 @@ kasan_md_init(void)
 }
 
 static inline void
-kasan_md_init_early(vm_offset_t bootstack, size_t size)
+kasan_md_init_early(vm_pointer_t bootstack, size_t size)
 {
-
 	kasan_shadow_map(bootstack, size);
 }
 

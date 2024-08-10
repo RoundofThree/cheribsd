@@ -504,6 +504,12 @@ static pt_entry_t pmap_pte_bti(pmap_t pmap, vm_offset_t va);
 #define	pmap_store(table, entry)	atomic_store_64(table, entry)
 #define	pmap_fcmpset(pte, exp, des)	atomic_fcmpset_64((pte), (exp), (des))
 
+#ifdef KASAN
+#ifdef __CHERI_PURE_CAPABILITY__
+void *kasan_base_cap;		/* Capability for the KASAN map region */
+#endif
+#endif
+
 /********************/
 /* Inline functions */
 /********************/
@@ -1496,7 +1502,7 @@ pmap_bootstrap(vm_size_t kernlen)
 	    VM_MAX_KERNEL_ADDRESS - PMAP_MAPDEV_EARLY_SIZE);
 	kernel_vm_end = virtual_avail;
 
-	pa = pmap_early_vtophys(bs_state.freemempos);
+	pa = pmap_early_vtophys((vm_offset_t)bs_state.freemempos);
 
 	physmem_exclude_region(start_pa, pa - start_pa, EXFLAG_NOALLOC);
 
@@ -1527,7 +1533,7 @@ pmap_bootstrap_san(void)
 	physmap_idx = physmem_avail(physmap, nitems(physmap));
 	physmap_idx /= 2;
 
-	shadow_npages = (virtual_avail - VM_MIN_KERNEL_ADDRESS) / PAGE_SIZE;
+	shadow_npages = ((vm_offset_t)virtual_avail - VM_MIN_KERNEL_ADDRESS) / PAGE_SIZE;
 	shadow_npages = howmany(shadow_npages, KASAN_SHADOW_SCALE);
 	nkasan_l2 = howmany(shadow_npages, Ln_ENTRIES);
 
@@ -1557,6 +1563,13 @@ pmap_bootstrap_san(void)
 	if (nkasan_l2 != 0)
 		panic("Could not find phys region for shadow map");
 
+#ifdef __CHERI_PURE_CAPABILITY__
+	kasan_base_cap = cheri_setaddress(kernel_root_cap, KASAN_MIN_ADDRESS);
+	kasan_base_cap = cheri_setbounds(kasan_base_cap,
+	    va - KASAN_MIN_ADDRESS);
+	kasan_base_cap = cheri_andperm(kasan_base_cap,
+	    CHERI_PERMS_KERNEL_DATA);
+#endif
 	/*
 	 * Done. We should now have a valid shadow address mapped for all KVA
 	 * that has been mapped so far, i.e., KERNBASE to virtual_avail. Thus,
@@ -8569,12 +8582,12 @@ pmap_san_bootstrap(struct arm64_bootparams *abp)
 
 #define	SAN_BOOTSTRAP_L2_SIZE	(1 * L2_SIZE)
 #define	SAN_BOOTSTRAP_SIZE	(2 * PAGE_SIZE)
-static vm_offset_t __nosanitizeaddress
+static vm_pointer_t __nosanitizeaddress
 pmap_san_enter_bootstrap_alloc_l2(void)
 {
 	static uint8_t bootstrap_data[SAN_BOOTSTRAP_L2_SIZE] __aligned(L2_SIZE);
 	static size_t offset = 0;
-	vm_offset_t addr;
+	vm_pointer_t addr;
 
 	if (offset + L2_SIZE > sizeof(bootstrap_data)) {
 		panic("%s: out of memory for the bootstrap shadow map L2 entries",
@@ -8589,12 +8602,12 @@ pmap_san_enter_bootstrap_alloc_l2(void)
 /*
  * SAN L1 + L2 pages, maybe L3 entries later?
  */
-static vm_offset_t __nosanitizeaddress
+static vm_pointer_t __nosanitizeaddress
 pmap_san_enter_bootstrap_alloc_pages(int npages)
 {
 	static uint8_t bootstrap_data[SAN_BOOTSTRAP_SIZE] __aligned(PAGE_SIZE);
 	static size_t offset = 0;
-	vm_offset_t addr;
+	vm_pointer_t addr;
 
 	if (offset + (npages * PAGE_SIZE) > sizeof(bootstrap_data)) {
 		panic("%s: out of memory for the bootstrap shadow map",
@@ -8609,7 +8622,7 @@ pmap_san_enter_bootstrap_alloc_pages(int npages)
 static void __nosanitizeaddress
 pmap_san_enter_bootstrap(void)
 {
-	vm_offset_t freemempos;
+	vm_pointer_t freemempos;
 
 	/* L1, L2 */
 	freemempos = pmap_san_enter_bootstrap_alloc_pages(2);
