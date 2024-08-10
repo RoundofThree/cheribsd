@@ -106,7 +106,7 @@ kasan_shadow_map(vm_pointer_t addr, size_t size)
 	vm_offset_t sva, eva;
 
 	KASSERT(addr % KASAN_SHADOW_SCALE == 0,
-	    ("%s: invalid address %#lx", __func__, addr));
+	    ("%s: invalid address %p", __func__, (void *)addr));
 
 	sz = roundup(size, KASAN_SHADOW_SCALE) / KASAN_SHADOW_SCALE;
 
