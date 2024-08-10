@@ -101,7 +101,7 @@ SYSCTL_BOOL(_debug_kasan, OID_AUTO, disabled, CTLFLAG_RDTUN | CTLFLAG_NOFETCH,
 /* -------------------------------------------------------------------------- */
 
 void
-kasan_shadow_map(vm_offset_t addr, size_t size)
+kasan_shadow_map(vm_pointer_t addr, size_t size)
 {
 	size_t sz, npages, i;
 	vm_offset_t sva, eva;
@@ -144,7 +144,7 @@ kasan_init(void)
 }
 
 void
-kasan_init_early(vm_offset_t stack, size_t size)
+kasan_init_early(vm_pointer_t stack, size_t size)
 {
 	kasan_md_init_early(stack, size);
 }
@@ -238,7 +238,7 @@ kasan_shadow_Nbyte_fill(const void *addr, size_t size, uint8_t code)
 	KASSERT(size % KASAN_SHADOW_SCALE == 0,
 	    ("%s: invalid size %zu", __func__, size));
 
-	shad = (void *)kasan_md_addr_to_shad((uintptr_t)addr);
+	shad = (void *)kasan_md_addr_to_shad((vm_offset_t)addr);
 	size = size >> KASAN_SHADOW_SCALE_SHIFT;
 
 	__builtin_memset(shad, code, size);
@@ -275,7 +275,7 @@ kasan_mark(const void *addr, size_t size, size_t redzsize, uint8_t code)
 	redz = redzsize - roundup(size, KASAN_SHADOW_SCALE);
 	KASSERT(redz % KASAN_SHADOW_SCALE == 0,
 	    ("%s: invalid size %zu", __func__, redz));
-	shad = (int8_t *)kasan_md_addr_to_shad((uintptr_t)addr);
+	shad = (int8_t *)kasan_md_addr_to_shad((vm_offset_t)addr);
 
 	/* Chunks of 8 bytes, valid. */
 	n = size / KASAN_SHADOW_SCALE;
