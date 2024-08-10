@@ -573,7 +573,7 @@ kasan_mark_item_valid(uma_zone_t zone, void *item)
 	} else {
 		pcpu_item = zpcpu_base_to_offset(item);
 		for (i = 0; i <= mp_maxid; i++)
-			kasan_mark(zpcpu_get_cpu(pcpu_item, i), sz, rsz,
+			kasan_mark(zpcpu_get_cpu_obj(pcpu_item, i, sz), sz, rsz,
 			    KASAN_GENERIC_REDZONE);
 	}
 }
@@ -594,7 +594,7 @@ kasan_mark_item_invalid(uma_zone_t zone, void *item)
 	} else {
 		pcpu_item = zpcpu_base_to_offset(item);
 		for (i = 0; i <= mp_maxid; i++)
-			kasan_mark(zpcpu_get_cpu(pcpu_item, i), 0, sz,
+			kasan_mark(zpcpu_get_cpu_obj(pcpu_item, i, sz), 0, sz,
 			    KASAN_UMA_FREED);
 	}
 }
@@ -685,9 +685,9 @@ kmsan_mark_item_uninitialized(uma_zone_t zone, void *item)
 	} else {
 		pcpu_item = zpcpu_base_to_offset(item);
 		for (i = 0; i <= mp_maxid; i++) {
-			kmsan_orig(zpcpu_get_cpu(pcpu_item, i), sz,
+			kmsan_orig(zpcpu_get_cpu_obj(pcpu_item, i, sz), sz,
 			    KMSAN_TYPE_UMA, KMSAN_RET_ADDR);
-			kmsan_mark(zpcpu_get_cpu(pcpu_item, i), sz,
+			kmsan_mark(zpcpu_get_cpu_obj(pcpu_item, i, sz), sz,
 			    KMSAN_STATE_INITED);
 		}
 	}
