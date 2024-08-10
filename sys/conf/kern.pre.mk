@@ -93,16 +93,17 @@ COMPAT_FREEBSD32_ENABLED!= grep COMPAT_FREEBSD32 opt_global.h || true ; echo
 
 KASAN_ENABLED!=	grep KASAN opt_global.h || true ; echo
 .if !empty(KASAN_ENABLED)
+# XXXR3: I think ASAN is broken in the Morello compiler at the moment
 .if ${MACHINE_ABI:Mpurecap}
-SAN_CFLAGS+=	-DSAN_NEEDS_INTERCEPTORS -DSAN_INTERCEPTOR_PREFIX=kasan \
-		-fsanitize=kernel-address \
-		-mllvm -asan-stack=false \
-		-mllvm -asan-instrument-dynamic-allocas=false \
-		-mllvm -asan-globals=false \
-		-mllvm -asan-use-after-scope=true \
-		-mllvm -asan-instrumentation-with-call-threshold=0 \
-		-mllvm -asan-instrument-byval=false \
-		-mllvm -asan-use-after-return=always
+# SAN_CFLAGS+=	-DSAN_NEEDS_INTERCEPTORS -DSAN_INTERCEPTOR_PREFIX=kasan \
+# 		-fsanitize=kernel-address \
+# 		-mllvm -asan-stack=false \
+# 		-mllvm -asan-instrument-dynamic-allocas=false \
+# 		-mllvm -asan-globals=false \
+# 		-mllvm -asan-use-after-scope=true \
+# 		-mllvm -asan-instrumentation-with-call-threshold=0 \
+# 		-mllvm -asan-instrument-byval=false \
+# 		-mllvm -asan-use-after-return=always
 .else
 SAN_CFLAGS+=	-DSAN_NEEDS_INTERCEPTORS -DSAN_INTERCEPTOR_PREFIX=kasan \
 		-fsanitize=kernel-address \

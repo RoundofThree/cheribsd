@@ -9,7 +9,8 @@ ident		GENERIC-MORELLO-PURECAP-SYZKALLER
 
 options 	COVERAGE
 options 	KCOV
-options     KASAN
+# XXXR3: Morello compiler ASAN is broken at the moment
+# options     KASAN
 
 # Netgraph and related modules
 options     NETGRAPH
