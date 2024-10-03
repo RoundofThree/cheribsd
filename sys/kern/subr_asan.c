@@ -100,13 +100,13 @@ SYSCTL_BOOL(_debug_kasan, OID_AUTO, disabled, CTLFLAG_RDTUN | CTLFLAG_NOFETCH,
 /* -------------------------------------------------------------------------- */
 
 void
-kasan_shadow_map(vm_pointer_t addr, size_t size)
+kasan_shadow_map(vm_offset_t addr, size_t size)
 {
 	size_t sz, npages, i;
 	vm_offset_t sva, eva;
 
 	KASSERT(addr % KASAN_SHADOW_SCALE == 0,
-	    ("%s: invalid address %p", __func__, (void *)addr));
+	    ("%s: invalid address %#lx", __func__, addr));
 
 	sz = roundup(size, KASAN_SHADOW_SCALE) / KASAN_SHADOW_SCALE;
 
@@ -143,7 +143,7 @@ kasan_init(void)
 }
 
 void
-kasan_init_early(vm_pointer_t stack, size_t size)
+kasan_init_early(vm_offset_t stack, size_t size)
 {
 	kasan_md_init_early(stack, size);
 }
