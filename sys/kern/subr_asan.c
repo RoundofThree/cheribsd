@@ -304,6 +304,32 @@ kasan_thread_alloc(struct thread *td)
 	}
 }
 
+static void
+kasan_unpoison_curstack(bool whole_stack)
+{
+	uintptr_t base; // this must be the first local variable
+	size_t sz;
+	uintptr_t cur = (uintptr_t)&base;
+	struct thread *td;
+	td = curthread;
+	int onstack = sigonstack(curthread->td_frame->tf_sp);
+	if ((td->td_pflags & TDP_ALTSTACK) != 0 && !onstack) {
+		base = (uintptr_t)td->td_sigstk.ss_sp;
+		sz = td->td_sigstk.ss_size;
+	} else {
+		base = td->td_kstack;
+		sz = ptoa(td->td_kstack_pages);
+	}
+	if (whole_stack) {
+		cur = base;
+	}
+	if (cur >= base && cur < base + sz) {
+		/* unpoison from current stack depth to the top */
+		size_t unused = cur - base;
+		kasan_mark((void *)cur, sz - unused, sz - unused, 0);
+	}
+}
+
 /* -------------------------------------------------------------------------- */
 
 #define ADDR_CROSSES_SCALE_BOUNDARY(addr, size) 		\
@@ -1156,7 +1182,13 @@ __asan_storeN_noabort(unsigned long addr, size_t size)
 void
 __asan_handle_no_return(void)
 {
-	/* nothing */
+	kasan_unpoison_curstack(false);
+
+	/*
+	 * No need to free any fakestack objects because they must stay alive until
+	 * we drop the real stack, at which point we can drop the entire fakestack
+	 * anyway.
+	 */
 }
 
 #define ASAN_SET_SHADOW(byte) \
