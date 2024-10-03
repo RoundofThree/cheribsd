@@ -384,7 +384,7 @@ reloc_instr_imm(Elf32_Addr *where, Elf_Addr val, u_int msb, u_int lsb)
 }
 
 #if __has_feature(capabilities)
-static void __nosanitizecoverage
+static void __nosanitizecoverage __nosanitizeaddress
 decode_fragment(Elf_Addr *fragment, Elf_Addr relocbase, Elf_Addr *addrp,
     Elf_Addr *sizep, uint8_t *permsp)
 {
@@ -393,7 +393,7 @@ decode_fragment(Elf_Addr *fragment, Elf_Addr relocbase, Elf_Addr *addrp,
 	*permsp = fragment[1] >> (8 * sizeof(Elf_Addr) - 8);
 }
 
-static uintcap_t __nosanitizecoverage
+static uintcap_t __nosanitizecoverage __nosanitizeaddress
 build_reloc_cap(Elf_Addr addr, Elf_Addr size, uint8_t perms, Elf_Addr offset,
     void * __capability data_cap, const void * __capability code_cap)
 {
@@ -426,7 +426,7 @@ build_reloc_cap(Elf_Addr addr, Elf_Addr size, uint8_t perms, Elf_Addr offset,
 }
 
 #ifdef __CHERI_PURE_CAPABILITY__
-static uintcap_t __nosanitizecoverage
+static uintcap_t __nosanitizecoverage __nosanitizeaddress
 build_cap_from_fragment(Elf_Addr *fragment, Elf_Addr relocbase, Elf_Addr offset,
     void * __capability data_cap, const void * __capability code_cap)
 {
@@ -738,7 +738,7 @@ arm64_exec_protect(struct image_params *imgp, int flags __unused)
 /*
  * Handle boot-time kernel relocations, this is called by locore.
  */
-void __nosanitizecoverage
+void __nosanitizecoverage __nosanitizeaddress
 elf_reloc_self(const Elf_Dyn *dynp, void *data_cap, const void *code_cap)
 {
 	const Elf_Rela *rela = NULL, *rela_end;

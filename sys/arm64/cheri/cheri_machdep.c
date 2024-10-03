@@ -56,7 +56,7 @@ uintptr_t __asan_shadow_memory_dynamic_address = (uintptr_t)(intcap_t)-1;
 #endif
 #endif
 
-void __nosanitizecoverage
+void __nosanitizecoverage __nosanitizeaddress
 cheri_init_capabilities(void * __capability kroot)
 {
 	void * __capability ctemp;
