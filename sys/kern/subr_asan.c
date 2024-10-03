@@ -1156,7 +1156,13 @@ __asan_storeN_noabort(unsigned long addr, size_t size)
 void
 __asan_handle_no_return(void)
 {
-	/* nothing */
+	kasan_unpoison_curstack(false);
+
+	/*
+	 * No need to free any fakestack objects because they must stay alive until
+	 * we drop the real stack, at which point we can drop the entire fakestack
+	 * anyway.
+	 */
 }
 
 #define ASAN_SET_SHADOW(byte) \
