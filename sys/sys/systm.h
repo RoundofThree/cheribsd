@@ -327,17 +327,32 @@ void	* __capability memmovenocap_c(void * _Nonnull __capability dest,
 #ifdef SAN_NEEDS_INTERCEPTORS
 #define	SAN_INTERCEPTOR(func)	\
 	__CONCAT(SAN_INTERCEPTOR_PREFIX, __CONCAT(_, func))
-void	*SAN_INTERCEPTOR(memset)(void *, int, size_t);
-void	*SAN_INTERCEPTOR(memcpy)(void *, const void *, size_t);
-void	*SAN_INTERCEPTOR(memmove)(void *, const void *, size_t);
+void	SAN_INTERCEPTOR(memset)(void *, int, size_t);
+void	SAN_INTERCEPTOR(memcpy)(void *, const void *, size_t);
+void	SAN_INTERCEPTOR(memmove)(void *, const void *, size_t);
 int	SAN_INTERCEPTOR(memcmp)(const void *, const void *, size_t);
 #ifndef SAN_RUNTIME
-#define bcopy(from, to, len)	SAN_INTERCEPTOR(memmove)((to), (from), (len))
-#define bzero(buf, len)		SAN_INTERCEPTOR(memset)((buf), 0, (len))
+#define bcopy(from, to, len)	({				\
+SAN_INTERCEPTOR(memmove)((to), (from), (len));	\
+__builtin_memmove((to), (from), (len));			\
+})
+#define bzero(buf, len)			({				\
+SAN_INTERCEPTOR(memset)((buf), 0, (len));		\
+__builtin_memset((buf), 0, (len));				\
+})
 #define bcmp(b1, b2, len)	SAN_INTERCEPTOR(memcmp)((b1), (b2), (len))
-#define memset(buf, c, len)	SAN_INTERCEPTOR(memset)((buf), (c), (len))
-#define memcpy(to, from, len)	SAN_INTERCEPTOR(memcpy)((to), (from), (len))
-#define memmove(dest, src, n)	SAN_INTERCEPTOR(memmove)((dest), (src), (n))
+#define memset(buf, c, len)		({				\
+SAN_INTERCEPTOR(memset)((buf), (c), (len));		\
+__builtin_memset((buf), (c), (len));				\
+})
+#define memcpy(to, from, len)	({				\
+SAN_INTERCEPTOR(memcpy)((to), (from), (len));	\
+__builtin_memcpy((to), (from), (len));			\
+})
+#define memmove(dest, src, n)	({				\
+SAN_INTERCEPTOR(memmove)((dest), (src), (n));	\
+__builtin_memmove((dest), (src), (n));			\
+})
 #define memcmp(b1, b2, len)	SAN_INTERCEPTOR(memcmp)((b1), (b2), (len))
 #endif /* !SAN_RUNTIME */
 #else /* !SAN_NEEDS_INTERCEPTORS */
