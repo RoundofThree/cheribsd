@@ -542,12 +542,6 @@ static void pmap_bti_deassign_all(pmap_t pmap);
 #define	pmap_store(table, entry)	atomic_store_64(table, entry)
 #define	pmap_fcmpset(pte, exp, des)	atomic_fcmpset_64((pte), (exp), (des))
 
-#ifdef KASAN
-#ifdef __CHERI_PURE_CAPABILITY__
-void *kasan_base_cap;		/* Capability for the KASAN map region */
-#endif
-#endif
-
 /********************/
 /* Inline functions */
 /********************/
@@ -1620,13 +1614,6 @@ pmap_bootstrap_san1(vm_offset_t va, int scale)
 	if (i < 0)
 		panic("Could not find phys region for shadow map");
 
-#ifdef __CHERI_PURE_CAPABILITY__
-	kasan_base_cap = cheri_setaddress(kernel_root_cap, KASAN_MIN_ADDRESS);
-	kasan_base_cap = cheri_setbounds(kasan_base_cap,
-	    va - KASAN_MIN_ADDRESS);
-	kasan_base_cap = cheri_andperm(kasan_base_cap,
-	    CHERI_PERMS_KERNEL_DATA);
-#endif
 	/*
 	 * Done. We should now have a valid shadow address mapped for all KVA
 	 * that has been mapped so far, i.e., KERNBASE to virtual_avail. Thus,

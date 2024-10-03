@@ -113,7 +113,7 @@ SAN_CFLAGS+=	-DSAN_NEEDS_INTERCEPTORS -DSAN_INTERCEPTOR_PREFIX=kasan \
 		-mllvm -asan-instrumentation-with-call-threshold=0 \
 		-mllvm -asan-instrument-byval=false
 .endif 
-.if ${MACHINE_CPUARCH} == "aarch64"
+.if ${MACHINE_CPUARCH} == "aarch64" && !${MACHINE_ABI:Mpurecap}
 # KASAN/ARM64 TODO: -asan-mapping-offset is calculated from:
 #	   (VM_KERNEL_MIN_ADDRESS >> KASAN_SHADOW_SCALE_SHIFT) + $offset = KASAN_MIN_ADDRESS
 #
@@ -121,6 +121,7 @@ SAN_CFLAGS+=	-DSAN_NEEDS_INTERCEPTORS -DSAN_INTERCEPTOR_PREFIX=kasan \
 #	KASAN_MIN_ADDRESS, and this offset value should eventually be
 #	upstreamed similar to: https://reviews.llvm.org/D98285
 #
+# XXXR3: This must be dynamic in purecap as it must derive from a valid capability
 SAN_CFLAGS+=	-mllvm -asan-mapping-offset=0xdfff208000000000
 .elif ${MACHINE_CPUARCH} == "amd64" && \
       ${COMPILER_TYPE} == "clang" && ${COMPILER_VERSION} >= 180000
