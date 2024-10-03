@@ -52,7 +52,7 @@ void *kernel_root_cap = (void *)(intcap_t)-1;
 void *vmm_el2_root_cap = (void *)(intcap_t)-1;
 #endif
 
-void __nosanitizecoverage
+void __nosanitizecoverage __nosanitizeaddress
 cheri_init_capabilities(void * __capability kroot)
 {
 	void * __capability ctemp;

@@ -401,7 +401,7 @@ pmap_unmapdev(void *p, vm_size_t size)
 }
 
 #ifdef __CHERI_PURE_CAPABILITY__
-void __nosanitizecoverage
+void __nosanitizecoverage __nosanitizeaddress
 devmap_init_capability(void * __capability cap)
 {
 	devmap_capability = cap;
