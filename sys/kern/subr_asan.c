@@ -441,12 +441,12 @@ kasan_shadow_check(unsigned long addr, size_t size, bool write,
 
 /* -------------------------------------------------------------------------- */
 
-void *
+void
 kasan_memcpy(void *dst, const void *src, size_t len)
 {
 	kasan_shadow_check((unsigned long)src, len, false, __RET_ADDR);
 	kasan_shadow_check((unsigned long)dst, len, true, __RET_ADDR);
-	return (__builtin_memcpy(dst, src, len));
+	// return (__builtin_memcpy(dst, src, len));
 }
 
 int
@@ -457,19 +457,19 @@ kasan_memcmp(const void *b1, const void *b2, size_t len)
 	return (__builtin_memcmp(b1, b2, len));
 }
 
-void *
+void
 kasan_memset(void *b, int c, size_t len)
 {
 	kasan_shadow_check((unsigned long)b, len, true, __RET_ADDR);
-	return (__builtin_memset(b, c, len));
+	// return (__builtin_memset(b, c, len));
 }
 
-void *
+void
 kasan_memmove(void *dst, const void *src, size_t len)
 {
 	kasan_shadow_check((unsigned long)src, len, false, __RET_ADDR);
 	kasan_shadow_check((unsigned long)dst, len, true, __RET_ADDR);
-	return (__builtin_memmove(dst, src, len));
+	// return (__builtin_memmove(dst, src, len));
 }
 
 size_t
