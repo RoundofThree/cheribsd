@@ -166,7 +166,7 @@
 #define	KASAN_MAX_ADDRESS	(0xffff00a000000000UL)
 
 #ifdef __CHERI_PURE_CAPABILITY__
-#define	KASAN_BASE kasan_base_cap
+#define	KASAN_BASE (void *)__asan_shadow_memory_dynamic_address
 #else
 #define	KASAN_BASE (void *)KASAN_MIN_ADDRESS
 #endif
@@ -280,7 +280,7 @@ extern vm_paddr_t dmap_phys_max;
 extern vm_offset_t dmap_max_addr;
 #ifdef __CHERI_PURE_CAPABILITY__
 extern void *dmap_base_cap;
-extern void *kasan_base_cap;
+extern uintptr_t __asan_shadow_memory_dynamic_address;
 #endif
 extern vm_offset_t vm_max_kernel_address;
 

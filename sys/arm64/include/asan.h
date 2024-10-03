@@ -38,6 +38,10 @@
 #include <vm/vm_page.h>
 #include <machine/vmparam.h>
 
+#ifdef __CHERI_PURE_CAPABILITY__
+extern uintptr_t __asan_shadow_memory_dynamic_address;
+#endif
+
 static inline vm_pointer_t
 kasan_md_addr_to_shad(vm_offset_t addr)
 {

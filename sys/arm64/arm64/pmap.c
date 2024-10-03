@@ -349,6 +349,7 @@ vm_paddr_t dmap_phys_base;	/* The start of the dmap region */
 vm_paddr_t dmap_phys_max;	/* The limit of the dmap region */
 vm_offset_t dmap_max_addr;	/* The virtual address limit of the dmap */
 #ifdef __CHERI_PURE_CAPABILITY__
+uintptr_t __asan_shadow_memory_dynamic_address;
 void *dmap_base_cap;		/* Capability for the direct map region */
 #endif
 
@@ -503,12 +504,6 @@ static pt_entry_t pmap_pte_bti(pmap_t pmap, vm_offset_t va);
 #define	pmap_set_bits(table, bits)	atomic_set_64(table, bits)
 #define	pmap_store(table, entry)	atomic_store_64(table, entry)
 #define	pmap_fcmpset(pte, exp, des)	atomic_fcmpset_64((pte), (exp), (des))
-
-#ifdef KASAN
-#ifdef __CHERI_PURE_CAPABILITY__
-void *kasan_base_cap;		/* Capability for the KASAN map region */
-#endif
-#endif
 
 /********************/
 /* Inline functions */
@@ -1564,10 +1559,10 @@ pmap_bootstrap_san(void)
 		panic("Could not find phys region for shadow map");
 
 #ifdef __CHERI_PURE_CAPABILITY__
-	kasan_base_cap = cheri_setaddress(kernel_root_cap, KASAN_MIN_ADDRESS);
-	kasan_base_cap = cheri_setbounds(kasan_base_cap,
-	    va - KASAN_MIN_ADDRESS);
-	kasan_base_cap = cheri_andperm(kasan_base_cap,
+	__asan_shadow_memory_dynamic_address = (uintptr_t)cheri_setaddress(kernel_root_cap, KASAN_MIN_ADDRESS);
+	__asan_shadow_memory_dynamic_address = (uintptr_t)cheri_setbounds(__asan_shadow_memory_dynamic_address,
+	    KASAN_MAX_ADDRESS - KASAN_MIN_ADDRESS);
+	__asan_shadow_memory_dynamic_address = (uintptr_t)cheri_andperm(__asan_shadow_memory_dynamic_address,
 	    CHERI_PERMS_KERNEL_DATA);
 #endif
 	/*
@@ -8577,6 +8572,10 @@ static pd_entry_t	*pmap_san_early_l2;
 void __nosanitizeaddress
 pmap_san_bootstrap(struct arm64_bootparams *abp)
 {
+#ifdef __CHERI_PURE_CAPABILITY__
+	// XXXR3: unbounded at KASAN early stages
+	__asan_shadow_memory_dynamic_address = (uintptr_t)cheri_setaddress(kernel_root_cap, KASAN_MIN_ADDRESS);
+#endif
 	kasan_init_early(abp->kern_stack, KSTACK_PAGES * PAGE_SIZE);
 }
 
