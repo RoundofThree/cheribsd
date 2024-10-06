@@ -353,6 +353,18 @@ __builtin_memcpy((to), (from), (len));			\
 SAN_INTERCEPTOR(memmove)((dest), (src), (n));	\
 __builtin_memmove((dest), (src), (n));			\
 })
+#define bcopy_c(from, to, len)	({				\
+SAN_INTERCEPTOR(memmove)((to), (from), (len));	\
+memmove_c((to), (from), (len));					\
+})
+#define bcopynocap(from, to, len)	({			\
+SAN_INTERCEPTOR(memmove)((to), (from), (len));	\
+memmovenocap((to), (from), (len));				\
+})
+#define bcopynocap_c(from, to, len)	({			\
+SAN_INTERCEPTOR(memmove)((to), (from), (len));	\
+memmovenocap_c((to), (from), (len));			\
+})
 #define memcmp(b1, b2, len)	SAN_INTERCEPTOR(memcmp)((b1), (b2), (len))
 #endif /* !SAN_RUNTIME */
 #else /* !SAN_NEEDS_INTERCEPTORS */
@@ -363,12 +375,10 @@ __builtin_memmove((dest), (src), (n));			\
 #define memcpy(to, from, len)	__builtin_memcpy((to), (from), (len))
 #define memmove(dest, src, n)	__builtin_memmove((dest), (src), (n))
 #define memcmp(b1, b2, len)	__builtin_memcmp((b1), (b2), (len))
-#endif /* SAN_NEEDS_INTERCEPTORS */
-
-// XXXR3: TODO: intercept
 #define bcopy_c(from, to, len)		memmove_c((to), (from), (len))
 #define bcopynocap(from, to, len)	memmovenocap((to), (from), (len))
 #define bcopynocap_c(from, to, len)	memmovenocap_c((to), (from), (len))
+#endif /* SAN_NEEDS_INTERCEPTORS */
 
 void	*memset_early(void * _Nonnull buf, int c, size_t len);
 #define bzero_early(buf, len) memset_early((buf), 0, (len))
