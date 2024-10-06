@@ -498,143 +498,149 @@ kasan_memmove(void *dst, const void *src, size_t len)
 	// return (__builtin_memmove(dst, src, len));
 }
 
+static size_t
+internal_strlen(const char *str)
+{
+	size_t i = 0;
+	while (str[i]) i++;
+	return (i);
+}
+
 size_t
 kasan_strlen(const char *str)
 {
-	const char *s;
-
-	s = str;
-	while (1) {
-		kasan_shadow_check((unsigned long)s, 1, false, __RET_ADDR);
-		if (*s == '\0')
-			break;
-		s++;
-	}
-
-	return (s - str);
+	size_t sz = internal_strlen(str);
+	kasan_shadow_check((unsigned long)str, sz + 1, false, __RET_ADDR);
+	return (sz);
 }
 
 char *
 kasan_strcpy(char *dst, const char *src)
 {
-	char *save = dst;
+	size_t src_size = internal_strlen(src);
 
-	while (1) {
-		kasan_shadow_check((unsigned long)src, 1, false, __RET_ADDR);
-		kasan_shadow_check((unsigned long)dst, 1, true, __RET_ADDR);
-		*dst = *src;
-		if (*src == '\0')
-			break;
-		src++, dst++;
-	}
+	kasan_shadow_check((unsigned long)src, src_size + 1, false, __RET_ADDR);
+	kasan_shadow_check((unsigned long)dst, src_size + 1, true, __RET_ADDR);
 
-	return save;
+	return (strcpy(dst, src));
 }
 
 int
 kasan_strcmp(const char *s1, const char *s2)
 {
-	while (1) {
-		kasan_shadow_check((unsigned long)s1, 1, false, __RET_ADDR);
-		kasan_shadow_check((unsigned long)s2, 1, false, __RET_ADDR);
-		if (*s1 != *s2)
-			break;
-		if (*s1 == '\0')
-			return 0;
-		s1++, s2++;
-	}
+	size_t s1_size = internal_strlen(s1);
+	size_t s2_size = internal_strlen(s2);
+	size_t sz = MIN(s1_size, s2_size);
+	kasan_shadow_check((unsigned long)s1, sz, false, __RET_ADDR);
+	kasan_shadow_check((unsigned long)s2, sz, false, __RET_ADDR);
 
-	return (*(const unsigned char *)s1 - *(const unsigned char *)s2);
+	return (strcmp(s1, s2));
 }
 
 int
-kasan_copyin(const void *uaddr, void *kaddr, size_t len)
+kasan_copyin(const void * __capability uaddr, void *kaddr, size_t len)
 {
 	kasan_shadow_check((unsigned long)kaddr, len, true, __RET_ADDR);
 	return (copyin(uaddr, kaddr, len));
 }
 
 int
-kasan_copyinstr(const void *uaddr, void *kaddr, size_t len, size_t *done)
+kasan_copyinstr(const void * __capability uaddr, void *kaddr, size_t len, size_t *done)
 {
 	kasan_shadow_check((unsigned long)kaddr, len, true, __RET_ADDR);
 	return (copyinstr(uaddr, kaddr, len, done));
 }
 
 int
-kasan_copyout(const void *kaddr, void *uaddr, size_t len)
+kasan_copyout(const void *kaddr, void * __capability uaddr, size_t len)
 {
 	kasan_shadow_check((unsigned long)kaddr, len, false, __RET_ADDR);
 	return (copyout(kaddr, uaddr, len));
 }
 
+#if __has_feature(capabilities)
+int
+kasan_copyincap(const void * __capability uaddr, void *kaddr, size_t len)
+{
+	kasan_shadow_check((unsigned long)kaddr, len, true, __RET_ADDR);
+	return (copyincap(uaddr, kaddr, len));
+}
+
+int
+kasan_copyoutcap(const void *kaddr, void * __capability uaddr, size_t len)
+{
+	kasan_shadow_check((unsigned long)kaddr, len, false, __RET_ADDR);
+	return (copyoutcap(kaddr, uaddr, len));
+}
+#endif /* __has_feature(capabilities) */
+
 /* -------------------------------------------------------------------------- */
 
 int
-kasan_fubyte(volatile const void *base)
+kasan_fubyte(volatile const void * __capability base)
 {
 	return (fubyte(base));
 }
 
 int
-kasan_fuword16(volatile const void *base)
+kasan_fuword16(volatile const void * __capability base)
 {
 	return (fuword16(base));
 }
 
 int
-kasan_fueword(volatile const void *base, long *val)
+kasan_fueword(volatile const void * __capability base, long *val)
 {
 	kasan_shadow_check((unsigned long)val, sizeof(*val), true, __RET_ADDR);
 	return (fueword(base, val));
 }
 
 int
-kasan_fueword32(volatile const void *base, int32_t *val)
+kasan_fueword32(volatile const void * __capability base, int32_t *val)
 {
 	kasan_shadow_check((unsigned long)val, sizeof(*val), true, __RET_ADDR);
 	return (fueword32(base, val));
 }
 
 int
-kasan_fueword64(volatile const void *base, int64_t *val)
+kasan_fueword64(volatile const void * __capability base, int64_t *val)
 {
 	kasan_shadow_check((unsigned long)val, sizeof(*val), true, __RET_ADDR);
 	return (fueword64(base, val));
 }
 
 int
-kasan_subyte(volatile void *base, int byte)
+kasan_subyte(volatile void * __capability base, int byte)
 {
 	return (subyte(base, byte));
 }
 
 int
-kasan_suword(volatile void *base, long word)
+kasan_suword(volatile void * __capability base, long word)
 {
 	return (suword(base, word));
 }
 
 int
-kasan_suword16(volatile void *base, int word)
+kasan_suword16(volatile void * __capability base, int word)
 {
 	return (suword16(base, word));
 }
 
 int
-kasan_suword32(volatile void *base, int32_t word)
+kasan_suword32(volatile void * __capability base, int32_t word)
 {
 	return (suword32(base, word));
 }
 
 int
-kasan_suword64(volatile void *base, int64_t word)
+kasan_suword64(volatile void * __capability base, int64_t word)
 {
 	return (suword64(base, word));
 }
 
 int
-kasan_casueword32(volatile uint32_t *base, uint32_t oldval, uint32_t *oldvalp,
+kasan_casueword32(volatile uint32_t * __capability base, uint32_t oldval, uint32_t *oldvalp,
     uint32_t newval)
 {
 	kasan_shadow_check((unsigned long)oldvalp, sizeof(*oldvalp), true,
@@ -643,13 +649,28 @@ kasan_casueword32(volatile uint32_t *base, uint32_t oldval, uint32_t *oldvalp,
 }
 
 int
-kasan_casueword(volatile u_long *base, u_long oldval, u_long *oldvalp,
+kasan_casueword(volatile u_long * __capability base, u_long oldval, u_long *oldvalp,
     u_long newval)
 {
 	kasan_shadow_check((unsigned long)oldvalp, sizeof(*oldvalp), true,
 	    __RET_ADDR);
 	return (casueword(base, oldval, oldvalp, newval));
 }
+
+#if __has_feature(capabilities)
+int
+kasan_fuecap(volatile const void * __capability base, intcap_t *val)
+{
+	kasan_shadow_check((unsigned long)val, sizeof(*val), true, __RET_ADDR);
+	return (fuecap(base, val));
+}
+
+int
+kasan_sucap(volatile const void * __capability base, intcap_t cap)
+{
+	return (sucap(base, cap));
+}
+#endif /* __has_feature(capabilities) */
 
 /* -------------------------------------------------------------------------- */
 
