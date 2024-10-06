@@ -613,6 +613,9 @@ malloc_large(size_t size, struct malloc_type *mtp, struct domainset *policy,
     int flags DEBUG_REDZONE_ARG_DEF)
 {
 	void *va;
+#if defined(DEBUG_REDZONE) || defined(KASAN)
+	unsigned long osize = size;
+#endif
 
 	size = roundup(size, PAGE_SIZE);
 	va = kmem_malloc_domainset(policy, size, flags);
@@ -636,7 +639,9 @@ malloc_large(size_t size, struct malloc_type *mtp, struct domainset *policy,
 #ifdef DEBUG_REDZONE
 		va = redzone_setup(va, osize);
 #endif
+#ifdef KASAN
 		kasan_mark(va, osize, size, KASAN_MALLOC_REDZONE);
+#endif
 	}
 	return (va);
 }
