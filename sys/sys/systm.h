@@ -343,7 +343,7 @@ __builtin_memset((buf), 0, (len));				\
 #define bcmp(b1, b2, len)	SAN_INTERCEPTOR(memcmp)((b1), (b2), (len))
 #define memset(buf, c, len)		({				\
 SAN_INTERCEPTOR(memset)((buf), (c), (len));		\
-__builtin_memset((buf), (c), (len));				\
+__builtin_memset((buf), (c), (len));			\
 })
 #define memcpy(to, from, len)	({				\
 SAN_INTERCEPTOR(memcpy)((to), (from), (len));	\
@@ -365,6 +365,7 @@ __builtin_memmove((dest), (src), (n));			\
 #define memcmp(b1, b2, len)	__builtin_memcmp((b1), (b2), (len))
 #endif /* SAN_NEEDS_INTERCEPTORS */
 
+// XXXR3: TODO: intercept
 #define bcopy_c(from, to, len)		memmove_c((to), (from), (len))
 #define bcopynocap(from, to, len)	memmovenocap((to), (from), (len))
 #define bcopynocap_c(from, to, len)	memmovenocap_c((to), (from), (len))
@@ -418,13 +419,26 @@ int copyoutcap_nofault(const void * _Nonnull __restrict kaddr,
 #endif
 
 #ifdef SAN_NEEDS_INTERCEPTORS
-int	SAN_INTERCEPTOR(copyin)(const void *, void *, size_t);
-int	SAN_INTERCEPTOR(copyinstr)(const void *, void *, size_t, size_t *);
-int	SAN_INTERCEPTOR(copyout)(const void *, void *, size_t);
+int	SAN_INTERCEPTOR(copyin)(const void * __restrict __capability,
+	void * _Nonnull __restrict, size_t);
+int	SAN_INTERCEPTOR(copyinstr)(const void * __restrict __capability,
+	void * _Nonnull __restrict, size_t, size_t * __restrict);
+int	SAN_INTERCEPTOR(copyout)(const void * _Nonnull __restrict,
+	void * __restrict __capability, size_t);
+#if __has_feature(capabilities)
+int	SAN_INTERCEPTOR(copyincap)(const void * __restrict __capability,
+	void * _Nonnull __restrict, size_t);
+int SAN_INTERCEPTOR(copyoutcap)(const void * _Nonnull __restrict,
+    void * __capability __restrict, size_t);
+#endif /* __has_feature(capabilities) */
 #ifndef SAN_RUNTIME
 #define	copyin(u, k, l)		SAN_INTERCEPTOR(copyin)((u), (k), (l))
 #define	copyinstr(u, k, l, lc)	SAN_INTERCEPTOR(copyinstr)((u), (k), (l), (lc))
 #define	copyout(k, u, l)	SAN_INTERCEPTOR(copyout)((k), (u), (l))
+#if __has_feature(capabilities)
+#define copyincap(u, k, l)	SAN_INTERCEPTOR(copyincap)((u), (k), (l))
+#define copyoutcap(k, u, l)	SAN_INTERCEPTOR(copyoutcap)((k), (u), (l))
+#endif /* __has_feature(capabilities) */
 #endif /* !SAN_RUNTIME */
 #endif /* SAN_NEEDS_INTERCEPTORS */
 
@@ -467,20 +481,26 @@ int	casueword32(volatile uint32_t * __capability base, uint32_t oldval,
 	    uint32_t *oldvalp, uint32_t newval);
 
 #if defined(SAN_NEEDS_INTERCEPTORS) && !defined(KCSAN)
-int	SAN_INTERCEPTOR(fubyte)(volatile const void *base);
-int	SAN_INTERCEPTOR(fuword16)(volatile const void *base);
-int	SAN_INTERCEPTOR(fueword)(volatile const void *base, long *val);
-int	SAN_INTERCEPTOR(fueword32)(volatile const void *base, int32_t *val);
-int	SAN_INTERCEPTOR(fueword64)(volatile const void *base, int64_t *val);
-int	SAN_INTERCEPTOR(subyte)(volatile void *base, int byte);
-int	SAN_INTERCEPTOR(suword)(volatile void *base, long word);
-int	SAN_INTERCEPTOR(suword16)(volatile void *base, int word);
-int	SAN_INTERCEPTOR(suword32)(volatile void *base, int32_t word);
-int	SAN_INTERCEPTOR(suword64)(volatile void *base, int64_t word);
-int	SAN_INTERCEPTOR(casueword32)(volatile uint32_t *base, uint32_t oldval,
-	    uint32_t *oldvalp, uint32_t newval);
-int	SAN_INTERCEPTOR(casueword)(volatile u_long *p, u_long oldval,
+int	SAN_INTERCEPTOR(fubyte)(volatile const void * __capability base);
+int	SAN_INTERCEPTOR(fuword16)(volatile const void * __capability base);
+int	SAN_INTERCEPTOR(fueword)(volatile const void * __capability base, long *val);
+int	SAN_INTERCEPTOR(fueword32)(volatile const void * __capability base, int32_t *val);
+int	SAN_INTERCEPTOR(fueword64)(volatile const void * __capability base, int64_t *val);
+int	SAN_INTERCEPTOR(subyte)(volatile void * __capability base, int byte);
+int	SAN_INTERCEPTOR(suword)(volatile void * __capability base, long word);
+int	SAN_INTERCEPTOR(suword16)(volatile void * __capability base, int word);
+int	SAN_INTERCEPTOR(suword32)(volatile void * __capability base, int32_t word);
+int	SAN_INTERCEPTOR(suword64)(volatile void * __capability base, int64_t word);
+int	SAN_INTERCEPTOR(casueword32)(volatile uint32_t * __capability base, uint32_t oldval,
+	    uint32_t * __capability oldvalp, uint32_t newval);
+int	SAN_INTERCEPTOR(casueword)(volatile u_long * __capability base, u_long oldval,
 	    u_long *oldvalp, u_long newval);
+#if __has_feature(capabilities)
+int SAN_INTERCEPTOR(fuecap)(volatile const void * __capability base,
+    intcap_t *val);
+int SAN_INTERCEPTOR(sucap)(volatile const void * __capability base,
+	intcap_t cap);
+#endif /* __has_feature(capabilities) */
 #ifndef SAN_RUNTIME
 #define	fubyte(b)		SAN_INTERCEPTOR(fubyte)((b))
 #define	fuword16(b)		SAN_INTERCEPTOR(fuword16)((b))
@@ -494,6 +514,10 @@ int	SAN_INTERCEPTOR(casueword)(volatile u_long *p, u_long oldval,
 #define	suword64(b, w)		SAN_INTERCEPTOR(suword64)((b), (w))
 #define	casueword32(b, o, p, n)	SAN_INTERCEPTOR(casueword32)((b), (o), (p), (n))
 #define	casueword(b, o, p, n)	SAN_INTERCEPTOR(casueword)((b), (o), (p), (n))
+#if __has_feature(capabilities)
+#define fuecap(b, v)	SAN_INTERCEPTOR(fuecap)((b), (v))
+#define sucap(b, w)		SAN_INTERCEPTOR(sucap)((b), (w))
+#endif /* __has_feature(capabilities) */
 #endif /* !SAN_RUNTIME */
 #endif /* SAN_NEEDS_INTERCEPTORS && !KCSAN */
 
