@@ -288,6 +288,14 @@ kasan_mark(const void *addr, size_t size, size_t redzsize, uint8_t code)
 		*shad++ = (size & KASAN_SHADOW_MASK);
 	}
 
+#ifdef __CHERI_PURE_CAPABILITY__
+	if (code == KASAN_GENERIC_REDZONE ||
+		code == KASAN_MALLOC_REDZONE ||
+		code == KASAN_KMEM_REDZONE) {
+		return;
+	}
+#endif
+
 	/* Chunks of 8 bytes, invalid. */
 	n = redz / KASAN_SHADOW_SCALE;
 	for (i = 0; i < n; i++) {
