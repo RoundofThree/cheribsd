@@ -153,7 +153,7 @@ vm_do_cheri_revoke(int *res, const struct vm_cheri_revoke_cookie *crc,
 			".arch_extension noc64\n\t"
 			".arch_extension a64c\n\t"
 #endif
-		  : [stxr_status] "=r" (stxr_status),
+		  : [stxr_status] "=&r" (stxr_status),
 		    [cscratch] "=&C" (cscratch), [cutr] "+C" (cutr)
 		  : [cut] "C" (cut), [cutp] "C" (cutp)
 		  : "memory");
