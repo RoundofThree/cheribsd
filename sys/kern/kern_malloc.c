@@ -636,7 +636,9 @@ malloc_large(size_t size, struct malloc_type *mtp, struct domainset *policy,
 #ifdef DEBUG_REDZONE
 		va = redzone_setup(va, osize);
 #endif
+#ifdef KASAN
 		kasan_mark(va, osize, size, KASAN_MALLOC_REDZONE);
+#endif
 	}
 	return (va);
 }
