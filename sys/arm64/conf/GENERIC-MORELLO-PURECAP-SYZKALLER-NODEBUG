@@ -13,4 +13,5 @@ options		COVERAGE
 options		KCOV
 options		INVARIANTS
 options		INVARIANT_SUPPORT
-options		DIAGNOSTIC
+# Slow
+# options		DIAGNOSTIC
