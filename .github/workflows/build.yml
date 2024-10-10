@@ -1,0 +1,113 @@
+name: Build and publish
+
+on:
+  # push:
+  #   branches: [ 'syzkaller/24.05' ]
+  workflow_dispatch:
+  pull_request:
+    branches: [ 'syzkaller/24.05' ]
+
+jobs:
+  build:
+    name: Run build scripts on server
+    runs-on: ubuntu-latest
+    steps:
+    - name: Install packages
+      run: |
+        sudo apt-add-repository -c universe
+        sudo apt-get update --quiet || true
+        sudo apt-get -yq --no-install-suggests --no-install-recommends install strongswan libstrongswan-extra-plugins libstrongswan-standard-plugins libcharon-extra-plugins libcharon-extauth-plugins strongswan* resolvconf
+
+    - name: Connect to intranet
+      run: | 
+        cat >>/tmp/ipsec.conf <<END
+        config setup
+
+        conn CL
+            keyexchange=ikev2
+            reauth=no
+            left=%any
+            leftid="$USERNAME"
+            leftauth=eap
+            leftsourceip=%config4,%config6
+            leftfirewall=yes
+            right="vpn2.cl.cam.ac.uk"
+            rightid=%any
+            rightsendcert=never
+            rightsubnet=128.232.0.0/16,129.169.0.0/16,131.111.0.0/16,192.18.195.0/24,193.60.80.0/20,193.63.252.0/23,172.16.0.0/13,172.24.0.0/14,172.28.0.0/15,172.30.0.0/16,10.128.0.0/9,10.64.0.0/10,2001:630:210::/44,2a05:b400::/32
+            auto=add
+
+        ca usertrust
+            cacert=/etc/ssl/certs/USERTrust_RSA_Certification_Authority.pem
+            auto=add
+        END
+        sudo cp /tmp/ipsec.conf /etc/ipsec.conf
+        cat >>/tmp/ipsec.secrets <<END
+        $USERNAME : EAP "$TOKEN"
+        END
+        sudo cp /tmp/ipsec.secrets /etc/ipsec.secrets
+        sudo ipsec restart
+        sleep 5
+        sudo ipsec up CL
+      env:
+        USERNAME: ${{ secrets.UID_USERNAME }}
+        TOKEN: ${{ secrets.UID_TOKEN }}
+
+    # - name: Authenticate to Kerberos
+    #   run: |
+    #     echo "$KBR_KEY" | /usr/bin/kinit zyj20@DC.CL.CAM.AC.UK
+    #   env:
+    #     KBR_KEY: ${{ secrets.KERBEROS_KEY }}
+
+    - name: Configure SSH
+      run: |
+        mkdir -p ~/.ssh/
+        echo "$SSH_KEY" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        cat >>~/.ssh/config <<END
+        Host amoracia
+          Hostname $SSH_HOST
+          User $SSH_USER
+          IdentityFile ~/.ssh/id_rsa
+          ServerAliveCountMax 2
+          ServerAliveInterval 300
+          StrictHostKeyChecking no
+        END
+      env:
+        SSH_USER: ${{ secrets.SSH_USER }}
+        SSH_KEY: ${{ secrets.SSH_KEY }}
+        SSH_HOST: ${{ secrets.AMORACIA_SSH_HOST }}
+
+    - name: Run build scripts
+      run: |
+        echo "Will be using commit $RELEVANT_SHA"
+        ssh amoracia "~/build-cheribsd-syzkaller.sh $RELEVANT_SHA"
+      env:
+        RELEVANT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+    - name: Fetch build artifacts
+      run: |
+        scp amoracia:~/cheri/output/rootfs-morello-purecap.tar.gz ~/rootfs-morello-purecap.tar.gz
+        scp amoracia:~/cheri/output/cheribsd-morello-purecap.img.tar.gz ~/cheribsd-morello-purecap.img.tar.gz
+
+    - name: Upload rootfs
+      uses: actions/upload-artifact@v4
+      with:
+        name: rootfs-morello-purecap.tar.gz
+        path: ~/rootfs-morello-purecap.tar.gz
+        if-no-files-found: error
+        retention-days: 1
+
+    - name: Upload image
+      uses: actions/upload-artifact@v4
+      with:
+        name: cheribsd-morello-purecap.img.tar.gz
+        path: ~/cheribsd-morello-purecap.img.tar.gz
+        if-no-files-found: error
+        retention-days: 1
+
+    - name: Setup tmate session
+      if: ${{ failure() }}
+      uses: mxschmitt/action-tmate@v3
+      with:
+        limit-access-to-actor: true

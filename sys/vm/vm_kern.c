@@ -217,7 +217,7 @@ kmem_alloc_san(vm_offset_t addr, vm_size_t size, vm_size_t asize, int flags)
 	} else {
 		kmsan_mark((void *)addr, asize, KMSAN_STATE_INITED);
 	}
-	kasan_mark((void *)addr, size, asize, KASAN_KMEM_REDZONE);
+	kasan_mark((void *)(uintptr_t)addr, size, asize, KASAN_KMEM_REDZONE);
 }
 
 static vm_page_t

@@ -50,9 +50,13 @@ void * __capability vmm_gpa_root_cap = (void * __capability)(intcap_t)-1;
 #ifdef __CHERI_PURE_CAPABILITY__
 void *kernel_root_cap = (void *)(intcap_t)-1;
 void *vmm_el2_root_cap = (void *)(intcap_t)-1;
+
+#ifdef KASAN
+uintptr_t __asan_shadow_memory_dynamic_address = (uintptr_t)(intcap_t)-1;
+#endif
 #endif
 
-void __nosanitizecoverage
+void __nosanitizecoverage __nosanitizeaddress
 cheri_init_capabilities(void * __capability kroot)
 {
 	void * __capability ctemp;
@@ -106,6 +110,14 @@ cheri_init_capabilities(void * __capability kroot)
 	vmm_el2_root_cap = cheri_setaddress(kroot, HYP_VM_MIN_ADDRESS);
 	vmm_el2_root_cap = cheri_setbounds(vmm_el2_root_cap,
 	    HYP_VM_MAX_ADDRESS - HYP_VM_MIN_ADDRESS);
+
+#ifdef KASAN
+	__asan_shadow_memory_dynamic_address = (uintptr_t)cheri_setaddress(kernel_root_cap, KASAN_MIN_ADDRESS);
+	__asan_shadow_memory_dynamic_address = (uintptr_t)cheri_setbounds(__asan_shadow_memory_dynamic_address,
+	    KASAN_MAX_ADDRESS - KASAN_MIN_ADDRESS);
+	__asan_shadow_memory_dynamic_address = (uintptr_t)cheri_andperm(__asan_shadow_memory_dynamic_address,
+	    CHERI_PERMS_KERNEL_DATA);
+#endif
 #endif
 }
 

@@ -93,6 +93,17 @@ COMPAT_FREEBSD32_ENABLED!= grep COMPAT_FREEBSD32 opt_global.h || true ; echo
 
 KASAN_ENABLED!=	grep KASAN opt_global.h || true ; echo
 .if !empty(KASAN_ENABLED)
+.if ${MACHINE_ABI:Mpurecap}
+SAN_CFLAGS+=	-DSAN_NEEDS_INTERCEPTORS -DSAN_INTERCEPTOR_PREFIX=kasan \
+		-fsanitize=kernel-address \
+		-mllvm -asan-opt-cheri-stack=true \
+		-mllvm -asan-stack=true \
+		-mllvm -asan-instrument-dynamic-allocas=true \
+		-mllvm -asan-globals=false \
+		-mllvm -asan-use-after-scope=true \
+		-mllvm -asan-instrumentation-with-call-threshold=0 \
+		-mllvm -asan-instrument-byval=false
+.else
 SAN_CFLAGS+=	-DSAN_NEEDS_INTERCEPTORS -DSAN_INTERCEPTOR_PREFIX=kasan \
 		-fsanitize=kernel-address \
 		-mllvm -asan-stack=true \
@@ -101,8 +112,8 @@ SAN_CFLAGS+=	-DSAN_NEEDS_INTERCEPTORS -DSAN_INTERCEPTOR_PREFIX=kasan \
 		-mllvm -asan-use-after-scope=true \
 		-mllvm -asan-instrumentation-with-call-threshold=0 \
 		-mllvm -asan-instrument-byval=false
-
-.if ${MACHINE_CPUARCH} == "aarch64"
+.endif 
+.if ${MACHINE_CPUARCH} == "aarch64" && !${MACHINE_ABI:Mpurecap}
 # KASAN/ARM64 TODO: -asan-mapping-offset is calculated from:
 #	   (VM_KERNEL_MIN_ADDRESS >> KASAN_SHADOW_SCALE_SHIFT) + $offset = KASAN_MIN_ADDRESS
 #
@@ -110,6 +121,7 @@ SAN_CFLAGS+=	-DSAN_NEEDS_INTERCEPTORS -DSAN_INTERCEPTOR_PREFIX=kasan \
 #	KASAN_MIN_ADDRESS, and this offset value should eventually be
 #	upstreamed similar to: https://reviews.llvm.org/D98285
 #
+# XXXR3: This must be dynamic in purecap as it must derive from a valid capability
 SAN_CFLAGS+=	-mllvm -asan-mapping-offset=0xdfff208000000000
 .elif ${MACHINE_CPUARCH} == "amd64" && \
       ${COMPILER_TYPE} == "clang" && ${COMPILER_VERSION} >= 180000

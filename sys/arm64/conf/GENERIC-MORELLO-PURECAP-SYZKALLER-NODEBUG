@@ -9,5 +9,9 @@ include "std.nodebug"
 ident		GENERIC-MORELLO-PURECAP-SYZKALLER-NODEBUG
 
 # Re-enable options after being disabled in std.nodebug
-options 	COVERAGE
-options 	KCOV
+options		COVERAGE
+options		KCOV
+options		INVARIANTS
+options		INVARIANT_SUPPORT
+# Slow
+# options		DIAGNOSTIC
