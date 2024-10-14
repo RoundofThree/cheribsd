@@ -982,7 +982,7 @@ ng_btsocket_hci_raw_bind(struct socket *so, struct sockaddr *nam,
 
 	mtx_lock(&pcb->pcb_mtx);
 	bcopy(sa, &pcb->addr, sizeof(pcb->addr));
-	pcb->addr->hci_node[hci_node_sz - 1] = '\0';
+	pcb->addr.hci_node[hci_node_sz - 1] = '\0';
 	mtx_unlock(&pcb->pcb_mtx);
 
 	return (0);
