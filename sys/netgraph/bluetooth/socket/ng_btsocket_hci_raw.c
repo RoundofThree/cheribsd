@@ -962,6 +962,7 @@ int
 ng_btsocket_hci_raw_bind(struct socket *so, struct sockaddr *nam,
 		struct thread *td)
 {
+	const size_t hci_node_sz = sizeof(((struct sockaddr_hci *)0)->hci_node);
 	ng_btsocket_hci_raw_pcb_p	 pcb = so2hci_raw_pcb(so);
 	struct sockaddr_hci		*sa = (struct sockaddr_hci *) nam;
 
@@ -981,6 +982,7 @@ ng_btsocket_hci_raw_bind(struct socket *so, struct sockaddr *nam,
 
 	mtx_lock(&pcb->pcb_mtx);
 	bcopy(sa, &pcb->addr, sizeof(pcb->addr));
+	pcb->addr->hci_node[hci_node_sz - 1] = '\0';
 	mtx_unlock(&pcb->pcb_mtx);
 
 	return (0);
@@ -1564,6 +1566,7 @@ int
 ng_btsocket_hci_raw_send(struct socket *so, int flags, struct mbuf *m,
 		struct sockaddr *sa, struct mbuf *control, struct thread *td)
 {
+	const size_t hci_node_sz = sizeof(((struct sockaddr_hci *)0)->hci_node);
 	ng_btsocket_hci_raw_pcb_p	 pcb = so2hci_raw_pcb(so);
 	struct mbuf			*nam = NULL;
 	int				 error = 0;
@@ -1635,7 +1638,8 @@ ng_btsocket_hci_raw_send(struct socket *so, int flags, struct mbuf *m,
 	}
 
 	nam->m_len = sizeof(struct sockaddr_hci);
-	bcopy(sa,mtod(nam, struct sockaddr_hci *),sizeof(struct sockaddr_hci));
+	bcopy(sa, mtod(nam, struct sockaddr_hci *), sizeof(struct sockaddr_hci));
+	mtod(nam, struct sockaddr_hci *)->hci_node[hci_node_sz - 1] = '\0';
 
 	nam->m_next = m;
 	m = NULL;
