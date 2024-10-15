@@ -1,0 +1,11 @@
+#
+# Pure capability ABI kernel for syzkaller fuzzing without debug options
+# without KASAN.
+#
+# $FreeBSD$
+
+include "GENERIC-MORELLO-PURECAP-SYZKALLER-NODEBUG"
+
+ident		GENERIC-MORELLO-PURECAP-SYZKALLER-NOKASAN
+
+nooptions   KASAN
