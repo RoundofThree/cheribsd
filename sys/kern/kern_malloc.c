@@ -618,13 +618,15 @@ malloc_large(size_t size, struct malloc_type *mtp, struct domainset *policy,
 	va = kmem_malloc_domainset(policy, size, flags);
 	if (va != NULL) {
 		/* The low bit is unused for slab pointers. */
-		vsetzoneslab((uintptr_t)va, NULL,
+		// XXXR3: we can use zone to store the unbounded pointer
+		vsetzoneslab((uintptr_t)va, va,
 		    (void *)(uintptr_t)((size << 1) | 1));
 		uma_total_inc(size);
 #ifdef __CHERI_PURE_CAPABILITY__
-		KASSERT(cheri_getlen(va) <= CHERI_REPRESENTABLE_LENGTH(size),
+		va = cheri_setbounds(va, osize);
+		KASSERT(cheri_getlen(va) <= CHERI_REPRESENTABLE_LENGTH(osize),
 		    ("Invalid bounds: expected %zx found %zx",
-		        (size_t)CHERI_REPRESENTABLE_LENGTH(size),
+		        (size_t)CHERI_REPRESENTABLE_LENGTH(osize),
 		        (size_t)cheri_getlen(va)));
 #endif
 	}
@@ -646,7 +648,17 @@ malloc_large(size_t size, struct malloc_type *mtp, struct domainset *policy,
 static void
 free_large(void *addr, size_t size)
 {
-
+#ifdef __CHERI_PURE_CAPABILITY__
+	uma_zone_t zone;
+	uma_slab_t slab __unused;
+	vtozoneslab((vm_offset_t)addr & (~UMA_SLAB_MASK), &zone, &slab);
+	addr = cheri_setaddress((void *)zone, (vm_offset_t)addr);
+	if (__predict_false(cheri_getlen(addr) !=
+		CHERI_REPRESENTABLE_LENGTH(size)))
+		panic("Invalid bounds: expected %zx found %zx",
+			(size_t)CHERI_REPRESENTABLE_LENGTH(size),
+			cheri_getlen(addr));
+#endif
 	kmem_free(addr, size);
 	uma_total_dec(size);
 }
@@ -1018,13 +1030,6 @@ free(void *addr, struct malloc_type *mtp)
 		uma_zfree_arg(zone, addr, slab);
 	} else {
 		size = malloc_large_size(slab);
-#ifdef __CHERI_PURE_CAPABILITY__
-		if (__predict_false(cheri_getlen(addr) !=
-		    CHERI_REPRESENTABLE_LENGTH(size)))
-			panic("Invalid bounds: expected %zx found %zx",
-			    (size_t)CHERI_REPRESENTABLE_LENGTH(size),
-			    cheri_getlen(addr));
-#endif
 		free_large(addr, size);
 	}
 	malloc_type_freed(mtp, addr, size);
