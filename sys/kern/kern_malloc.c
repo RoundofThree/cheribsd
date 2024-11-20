@@ -622,13 +622,6 @@ malloc_large(size_t size, struct malloc_type *mtp, struct domainset *policy,
 		vsetzoneslab((uintptr_t)va, va,
 		    (void *)(uintptr_t)((size << 1) | 1));
 		uma_total_inc(size);
-#ifdef __CHERI_PURE_CAPABILITY__
-		va = cheri_setbounds(va, osize);
-		KASSERT(cheri_getlen(va) <= CHERI_REPRESENTABLE_LENGTH(osize),
-		    ("Invalid bounds: expected %zx found %zx",
-		        (size_t)CHERI_REPRESENTABLE_LENGTH(osize),
-		        (size_t)cheri_getlen(va)));
-#endif
 	}
 	malloc_type_allocated(mtp, va, va == NULL ? 0 : size);
 	if (__predict_false(va == NULL)) {
@@ -638,8 +631,19 @@ malloc_large(size_t size, struct malloc_type *mtp, struct domainset *policy,
 #ifdef DEBUG_REDZONE
 		va = redzone_setup(va, osize);
 #endif
-#ifdef KASAN
+#if defined(KASAN) && !defined(__CHERI_PURE_CAPABILITY__)
 		kasan_mark(va, osize, size, KASAN_MALLOC_REDZONE);
+#endif
+#ifdef __CHERI_PURE_CAPABILITY__
+		va = cheri_setbounds(va, osize);
+		KASSERT(cheri_getlen(va) <= CHERI_REPRESENTABLE_LENGTH(osize),
+		    ("Invalid bounds: expected %zx found %zx",
+		        (size_t)CHERI_REPRESENTABLE_LENGTH(osize),
+		        (size_t)cheri_getlen(va)));
+		if (osize < CHERI_REPRESENTABLE_LENGTH(osize)) {
+			kasan_mark(va, osize, CHERI_REPRESENTABLE_LENGTH(osize),
+				KASAN_MALLOC_REDZONE);
+		}
 #endif
 	}
 	return (va);
@@ -808,7 +812,8 @@ malloc_domainset(size_t size, struct malloc_type *mtp, struct domainset *ds,
 	if (va != NULL) {
 		va = cheri_setbounds(va, osize);
 		if (osize < CHERI_REPRESENTABLE_LENGTH(osize)) {
-			kasan_mark((void *)va, osize, CHERI_REPRESENTABLE_LENGTH(osize), KASAN_MALLOC_REDZONE);
+			kasan_mark((void *)va, osize, CHERI_REPRESENTABLE_LENGTH(osize),
+				KASAN_MALLOC_REDZONE);
 		}
 	}
 #endif
@@ -1166,15 +1171,15 @@ realloc(void *addr, size_t size, struct malloc_type *mtp, int flags)
 	/* Reuse the original block if appropriate */
 	if (size <= alloc &&
 	    (size > (alloc >> REALLOC_FRACTION) || alloc == MINALLOCSIZE)) {
-		if (!malloc_large_slab(slab)) {
+#ifdef __CHERI_PURE_CAPABILITY__
 			if (size < CHERI_REPRESENTABLE_LENGTH(size)) {
 				kasan_mark((void *)addr, size, CHERI_REPRESENTABLE_LENGTH(size),
 					KASAN_MALLOC_REDZONE);
 			}
-		} else {
+#else
 			kasan_mark((void *)addr, size, alloc, KASAN_MALLOC_REDZONE);
-		}
-		return (addr);
+#endif
+			return (addr);
 	}
 #endif /* !DEBUG_REDZONE */
 
