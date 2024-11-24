@@ -679,15 +679,7 @@ kasan_quarantine_put(uma_zone_t zone, void *item, void *udata)
 	size_t sz = zone->uz_size;
 	int flags;
 
-	/*
-	 * Do not allocate slabs from VM if we are dealing with 
-	 * VM zones to avoid vmem lock recursion.
-	 * XXXR3: Do we really need this?
-	 */
-	flags = M_NOWAIT;
-	if (((uintptr_t)udata & UMA_ZONE_VM) != 0)
-		flags |= M_NOVM;
-	put_kqi = uma_zalloc(kasan_quarantine_items_zone, flags);
+	put_kqi = uma_zalloc(kasan_quarantine_items_zone, M_NOWAIT);
 
 	critical_enter();
 	curcpu_quarantine = DPCPU_PTR(kasan_quarantine);
