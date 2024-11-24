@@ -677,7 +677,6 @@ kasan_quarantine_put(uma_zone_t zone, void *item, void *udata)
 	struct kasan_quarantine_item *put_kqi, *pop_kqi, return_kqi;
 	struct kasan_quarantine *curcpu_quarantine;
 	size_t sz = zone->uz_size;
-	int flags;
 
 	put_kqi = uma_zalloc(kasan_quarantine_items_zone, M_NOWAIT);
 
