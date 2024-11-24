@@ -290,6 +290,10 @@ enum zfreeskip {
 	SKIP_FINI =	0x00020000,
 };
 
+#ifdef KASAN
+static uma_zone_t kasan_quarantine_items_zone;
+#endif
+
 /* Prototypes.. */
 
 void	uma_startup1(vm_pointer_t);
@@ -344,6 +348,9 @@ static int zone_import(void *, void **, int, int, int);
 static void zone_release(void *, void **, int);
 static bool cache_alloc(uma_zone_t, uma_cache_t, void *, int);
 static bool cache_free(uma_zone_t, uma_cache_t, void *, int);
+#ifdef KASAN
+static void kasan_quarantine_init(void);
+#endif
 
 static int sysctl_vm_zone_count(SYSCTL_HANDLER_ARGS);
 static int sysctl_vm_zone_stats(SYSCTL_HANDLER_ARGS);
@@ -438,7 +445,7 @@ bucket_init(void)
 		ubz->ubz_zone = uma_zcreate(ubz->ubz_name, size,
 		    NULL, NULL, NULL, NULL, UMA_ALIGN_PTR,
 		    UMA_ZONE_MTXCLASS | UMA_ZFLAG_BUCKET |
-		    UMA_ZONE_FIRSTTOUCH);
+		    UMA_ZONE_FIRSTTOUCH | UMA_ZONE_NOKASAN_QUARANTINE);
 	}
 }
 
@@ -622,6 +629,111 @@ kasan_mark_slab_invalid(uma_keg_t keg, void *mem)
 			sz = keg->uk_pgoff;
 		kasan_mark(mem, 0, sz, KASAN_UMA_FREED);
 	}
+}
+
+struct kasan_quarantine {
+	STAILQ_HEAD(, kasan_quarantine_item) kq_itemlist;
+	uint32_t						kq_size;
+	uint32_t						kq_count;
+};
+
+DPCPU_DEFINE_STATIC(struct kasan_quarantine, kasan_quarantine);
+
+static void
+kasan_quarantine_init(void)
+{
+	int i;
+	struct kasan_quarantine *quarantine;
+	kasan_quarantine_items_zone = uma_zcreate("KASAN quarantine item",
+		sizeof(struct kasan_quarantine_item), NULL, NULL, NULL, NULL,
+		UMA_ALIGN_PTR, UMA_ZONE_NOKASAN_QUARANTINE);
+	uma_zone_reserve(kasan_quarantine_items_zone, KASAN_QUARANTINE_ENTRIES / 50);
+	uma_prealloc(kasan_quarantine_items_zone, KASAN_QUARANTINE_ENTRIES / 50);
+
+	for (i = 0; i <= mp_maxid; i++) {
+		quarantine = DPCPU_ID_PTR(i, kasan_quarantine);
+		STAILQ_INIT(&quarantine->kq_itemlist);
+	}
+}
+
+/*
+ * This routine puts a KASAN quarantine item to the front of a tail queue.
+ * It returns a KASAN quarantine item, consisting of the arguments to
+ * uma_zfree_arg(), effectively swapping the arguments to that of an
+ * older invocation.
+ * 
+ * It first allocates a KASAN quarantine item header structure without
+ * waiting. If the allocation failed, it pops an element from the
+ * tail queue and reuses the container of that element, while returning
+ * the popped element. In degenerate cases where the tail queue is empty,
+ * it simply returns the arguments to quarantine, as if there is no
+ * quarantine. Else, if the allocation succeeded, it may return a zeroed
+ * KASAN quarantine item, or an item from the tail queue, according to
+ * quarantine heuristics.
+ */
+static struct kasan_quarantine_item
+kasan_quarantine_put(uma_zone_t zone, void *item, void *udata)
+{
+	struct kasan_quarantine_item *put_kqi, *pop_kqi, return_kqi;
+	struct kasan_quarantine *curcpu_quarantine;
+	size_t sz = zone->uz_size;
+	int flags;
+
+	/*
+	 * Do not allocate slabs from VM if we are dealing with 
+	 * VM zones to avoid vmem lock recursion.
+	 * XXXR3: Do we really need this?
+	 */
+	flags = M_NOWAIT;
+	if (((uintptr_t)udata & UMA_ZONE_VM) != 0)
+		flags |= M_NOVM;
+	put_kqi = uma_zalloc(kasan_quarantine_items_zone, flags);
+
+	critical_enter();
+	curcpu_quarantine = DPCPU_PTR(kasan_quarantine);
+	if (put_kqi == NULL) {
+		if (STAILQ_EMPTY(&curcpu_quarantine->kq_itemlist)) {
+			critical_exit();
+			return_kqi.kqi_zone = zone;
+			return_kqi.kqi_item = item;
+			return_kqi.kqi_udata = udata;
+			return (return_kqi);
+		}
+		put_kqi = STAILQ_FIRST(&curcpu_quarantine->kq_itemlist);
+		STAILQ_REMOVE_HEAD(&curcpu_quarantine->kq_itemlist, kqi_next);
+		curcpu_quarantine->kq_size -= put_kqi->kqi_zone->uz_size;
+		bcopy(put_kqi, &return_kqi, sizeof(struct kasan_quarantine_item));
+		put_kqi->kqi_zone = zone;
+		put_kqi->kqi_item = item;
+		put_kqi->kqi_udata = udata;
+		STAILQ_INSERT_TAIL(&curcpu_quarantine->kq_itemlist, put_kqi, kqi_next);
+		curcpu_quarantine->kq_size += sz;
+		critical_exit();
+		return (return_kqi);
+	}
+
+	put_kqi->kqi_zone = zone;
+	put_kqi->kqi_item = item;
+	put_kqi->kqi_udata = udata;
+	STAILQ_INSERT_TAIL(&curcpu_quarantine->kq_itemlist, put_kqi, kqi_next);
+	curcpu_quarantine->kq_size += sz;
+	curcpu_quarantine->kq_count++;
+	bzero(&return_kqi, sizeof(struct kasan_quarantine_item));
+
+	if (curcpu_quarantine->kq_size >= KASAN_QUARANTINE_MAXSIZE ||
+		curcpu_quarantine->kq_count > KASAN_QUARANTINE_ENTRIES) {
+		pop_kqi = STAILQ_FIRST(&curcpu_quarantine->kq_itemlist);
+		STAILQ_REMOVE_HEAD(&curcpu_quarantine->kq_itemlist, kqi_next);
+		bcopy(pop_kqi, &return_kqi, sizeof(struct kasan_quarantine_item));
+		curcpu_quarantine->kq_size -= return_kqi.kqi_zone->uz_size;
+		curcpu_quarantine->kq_count--;
+		critical_exit();
+		uma_zfree(kasan_quarantine_items_zone, pop_kqi);
+	} else {
+		critical_exit();
+	}
+	
+	return (return_kqi);
 }
 #else /* !KASAN */
 static void
@@ -3238,6 +3350,9 @@ uma_startup1(vm_pointer_t virtual_avail)
 
 	bucket_init();
 	smr_init();
+#ifdef KASAN
+	kasan_quarantine_init();
+#endif
 }
 
 #ifndef UMA_USE_DMAP
@@ -4638,6 +4753,21 @@ uma_zfree_arg(uma_zone_t zone, void *item, void *udata)
 	    __predict_false((uz_flags & UMA_ZFLAG_CTORDTOR) != 0))
 		item_dtor(zone, item, cache_uz_size(cache), udata, SKIP_NONE);
 
+#ifdef KASAN
+	if ((uz_flags & (UMA_ZONE_NOKASAN | UMA_ZFLAG_CACHE |
+		 UMA_ZONE_NOKASAN_QUARANTINE)) == 0) {
+		struct kasan_quarantine_item kqi;
+		kqi = kasan_quarantine_put(zone, item, udata);
+		zone = kqi.kqi_zone;
+		item = kqi.kqi_item;
+		udata = kqi.kqi_udata;
+		if (item == NULL) {
+			return;
+		}
+		cache = &zone->uz_cpu[curcpu];
+		uz_flags = cache_uz_flags(cache);
+	}
+#endif
 	/*
 	 * The race here is acceptable.  If we miss it we'll just have to wait
 	 * a little longer for the limits to be reset.

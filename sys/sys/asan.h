@@ -33,6 +33,7 @@
 
 #ifdef KASAN
 #include <sys/types.h>
+#include <sys/queue.h>
 
 /* ASAN constants. Part of the compiler ABI. */
 #define KASAN_SHADOW_SCALE		8
@@ -53,7 +54,19 @@
 #define	KASAN_KSTACK_FREED	0xFE
 #define	KASAN_EXEC_ARGS_FREED	0xFF
 
+/* Quarantine configuration. */
+#define KASAN_QUARANTINE_MAXSIZE    0x400000
+#define KASAN_QUARANTINE_ENTRIES    5000
+
 struct thread;
+struct uma_zone;
+
+struct kasan_quarantine_item {
+	STAILQ_ENTRY(kasan_quarantine_item)	kqi_next;
+	struct uma_zone  *kqi_zone;
+	void        *kqi_item;
+	void        *kqi_udata;
+};
 
 void kasan_init(void);
 void kasan_init_early(vm_offset_t, size_t);
