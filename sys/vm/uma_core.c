@@ -650,7 +650,7 @@ kasan_quarantine_init(void)
 	uma_zone_reserve(kasan_quarantine_items_zone, KASAN_QUARANTINE_ENTRIES / 50);
 	uma_prealloc(kasan_quarantine_items_zone, KASAN_QUARANTINE_ENTRIES / 50);
 
-	for (i = 0; i <= mp_maxid; i++) {
+	CPU_FOREACH(i) {
 		quarantine = DPCPU_ID_PTR(i, kasan_quarantine);
 		STAILQ_INIT(&quarantine->kq_itemlist);
 	}
