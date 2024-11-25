@@ -291,6 +291,7 @@ enum zfreeskip {
 };
 
 #ifdef KASAN
+static int kasan_quarantine_enabled;
 static uma_zone_t kasan_quarantine_items_zone;
 #endif
 
@@ -633,12 +634,16 @@ kasan_mark_slab_invalid(uma_keg_t keg, void *mem)
 
 struct kasan_quarantine {
 	STAILQ_HEAD(, kasan_quarantine_item) kq_itemlist;
-	uint32_t						kq_size;
-	uint32_t						kq_count;
+	uint32_t kq_size;
+	uint32_t kq_count;
 };
 
 DPCPU_DEFINE_STATIC(struct kasan_quarantine, kasan_quarantine);
 
+/*
+ * It can only be enabled after dynamic PCPU area is
+ * usable.
+ */
 static void
 kasan_quarantine_init(void)
 {
@@ -654,7 +659,11 @@ kasan_quarantine_init(void)
 		quarantine = DPCPU_ID_PTR(i, kasan_quarantine);
 		STAILQ_INIT(&quarantine->kq_itemlist);
 	}
+
+	kasan_quarantine_enabled = 1;
 }
+/* This needs to be after cpu_mp at SI_SUB_CPU, SI_ORDER_THIRD */
+SYSINIT(kasan_quarantine, SI_SUB_CPU, SI_ORDER_FOURTH, kasan_quarantine_init, NULL);
 
 /*
  * This routine puts a KASAN quarantine item to the front of a tail queue.
@@ -3342,7 +3351,7 @@ uma_startup1(vm_pointer_t virtual_avail)
 	bucket_init();
 	smr_init();
 #ifdef KASAN
-	kasan_quarantine_init();
+	kasan_quarantine_enabled = 0;
 #endif
 }
 
@@ -4745,7 +4754,8 @@ uma_zfree_arg(uma_zone_t zone, void *item, void *udata)
 		item_dtor(zone, item, cache_uz_size(cache), udata, SKIP_NONE);
 
 #ifdef KASAN
-	if ((uz_flags & (UMA_ZONE_NOKASAN | UMA_ZFLAG_CACHE |
+	if (kasan_quarantine_enabled &&
+		(uz_flags & (UMA_ZONE_NOKASAN | UMA_ZFLAG_CACHE |
 		 UMA_ZONE_NOKASAN_QUARANTINE)) == 0) {
 		struct kasan_quarantine_item kqi;
 		kqi = kasan_quarantine_put(zone, item, udata);
