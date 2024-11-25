@@ -3718,6 +3718,7 @@ item_dtor(uma_zone_t zone, void *item, int size, void *udata,
 			trash_dtor(item, size, zone);
 #endif
 	}
+	// XXXR3: this may not be called in uma_zfree_arg
 	kasan_mark_item_invalid(zone, item);
 }
 
@@ -4753,6 +4754,7 @@ uma_zfree_arg(uma_zone_t zone, void *item, void *udata)
 	    __predict_false((uz_flags & UMA_ZFLAG_CTORDTOR) != 0))
 		item_dtor(zone, item, cache_uz_size(cache), udata, SKIP_NONE);
 
+	kasan_mark_item_invalid(zone, item);
 #ifdef KASAN
 	if (kasan_quarantine_enabled &&
 		(uz_flags & (UMA_ZONE_NOKASAN | UMA_ZFLAG_CACHE |
