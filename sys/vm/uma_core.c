@@ -647,7 +647,7 @@ kasan_quarantine_init(void)
 	kasan_quarantine_items_zone = uma_zcreate("KASAN quarantine item",
 		sizeof(struct kasan_quarantine_item), NULL, NULL, NULL, NULL,
 		UMA_ALIGN_PTR, UMA_ZONE_NOKASAN_QUARANTINE);
-	uma_zone_reserve(kasan_quarantine_items_zone, KASAN_QUARANTINE_ENTRIES / 50);
+	// uma_zone_reserve(kasan_quarantine_items_zone, KASAN_QUARANTINE_ENTRIES / 50);
 	uma_prealloc(kasan_quarantine_items_zone, KASAN_QUARANTINE_ENTRIES / 50);
 
 	CPU_FOREACH(i) {
