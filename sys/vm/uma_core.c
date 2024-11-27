@@ -685,8 +685,18 @@ kasan_quarantine_put(uma_zone_t zone, void *item, void *udata)
 {
 	struct kasan_quarantine_item *put_kqi, *pop_kqi, return_kqi;
 	struct kasan_quarantine *curcpu_quarantine;
-	size_t sz = zone->uz_size;
+	size_t sz;
 
+	if (!kasan_quarantine_enabled ||
+		(zone->uz_flags & (UMA_ZONE_NOKASAN | UMA_ZFLAG_CACHE |
+		 UMA_ZONE_NOKASAN_QUARANTINE)) != 0) {
+		return_kqi.kqi_zone = zone;
+		return_kqi.kqi_item = item;
+		return_kqi.kqi_udata = udata;
+		return (return_kqi);
+	}
+
+	sz = zone->uz_size;
 	put_kqi = uma_zalloc(kasan_quarantine_items_zone, M_NOWAIT);
 
 	critical_enter();
@@ -4756,20 +4766,35 @@ uma_zfree_arg(uma_zone_t zone, void *item, void *udata)
 
 	kasan_mark_item_invalid(zone, item);
 #ifdef KASAN
-	if (kasan_quarantine_enabled &&
-		(uz_flags & (UMA_ZONE_NOKASAN | UMA_ZFLAG_CACHE |
-		 UMA_ZONE_NOKASAN_QUARANTINE)) == 0) {
-		struct kasan_quarantine_item kqi;
-		kqi = kasan_quarantine_put(zone, item, udata);
-		zone = kqi.kqi_zone;
-		item = kqi.kqi_item;
-		udata = kqi.kqi_udata;
-		if (item == NULL) {
-			return;
-		}
-		cache = &zone->uz_cpu[curcpu];
-		uz_flags = cache_uz_flags(cache);
+	struct kasan_quarantine_item kqi;
+	kqi = kasan_quarantine_put(zone, item, udata);
+	zone = kqi.kqi_zone;
+	item = kqi.kqi_item;
+	udata = kqi.kqi_udata;
+	if (item == NULL) {
+		return;
 	}
+	if ((zone->uz_flags & UMA_ZONE_SMR) != 0) {
+		/*
+		 * Quarantined SMR items should be treated differently.
+		 * They should not be cached to the allocbucket or it 
+		 * will cause confusion.
+		 * XXXR3: Can we do better with a better SMR quarantine
+		 * design?
+		 */
+		if (zone->uz_fini) {
+			kasan_mark_item_valid(zone, item);
+			zone->uz_fini(item, zone->uz_size);
+			kasan_mark_item_invalid(zone, item);
+		}
+		zone->uz_release(zone->uz_arg, &item, 1);
+		counter_u64_add(zone->uz_frees, 1);
+		if (zone->uz_max_items > 0)
+			zone_free_limit(zone, 1);
+		return;
+	}
+	cache = &zone->uz_cpu[curcpu];
+	uz_flags = cache_uz_flags(cache);
 #endif
 	/*
 	 * The race here is acceptable.  If we miss it we'll just have to wait
