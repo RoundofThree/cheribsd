@@ -639,6 +639,9 @@ struct kasan_quarantine {
 };
 
 DPCPU_DEFINE_STATIC(struct kasan_quarantine, kasan_quarantine);
+#ifdef KASAN_QUARANTINE_SMR
+DPCPU_DEFINE_STATIC(struct kasan_quarantine, kasan_quarantine_smr);
+#endif
 
 /*
  * It can only be enabled after dynamic PCPU area is
@@ -649,6 +652,9 @@ kasan_quarantine_init(void)
 {
 	int i;
 	struct kasan_quarantine *quarantine;
+#ifdef KASAN_QUARANTINE_SMR
+	struct kasan_quarantine *quarantine_smr;
+#endif
 	kasan_quarantine_items_zone = uma_zcreate("KASAN quarantine item",
 		sizeof(struct kasan_quarantine_item), NULL, NULL, NULL, NULL,
 		UMA_ALIGN_PTR, UMA_ZONE_NOKASAN_QUARANTINE);
@@ -659,6 +665,12 @@ kasan_quarantine_init(void)
 		quarantine = DPCPU_ID_PTR(i, kasan_quarantine);
 		STAILQ_INIT(&quarantine->kq_itemlist);
 	}
+#ifdef KASAN_QUARANTINE_SMR
+	CPU_FOREACH(i) {
+		quarantine_smr = DPCPU_ID_PTR(i, kasan_quarantine_smr);
+		STAILQ_INIT(&quarantine_smr->kq_itemlist);
+	}
+#endif
 
 	kasan_quarantine_enabled = 1;
 }
@@ -681,26 +693,29 @@ SYSINIT(kasan_quarantine, SI_SUB_CPU, SI_ORDER_FOURTH, kasan_quarantine_init, NU
  * quarantine heuristics.
  */
 static struct kasan_quarantine_item
-kasan_quarantine_put(uma_zone_t zone, void *item, void *udata)
+kasan_quarantine_put(uma_zone_t zone, void *item, void *udata
+#ifdef KASAN_QUARANTINE_SMR
+	, bool smr
+#endif
+)
 {
 	struct kasan_quarantine_item *put_kqi, *pop_kqi, return_kqi;
 	struct kasan_quarantine *curcpu_quarantine;
 	size_t sz;
 
-	if (!kasan_quarantine_enabled ||
-		(zone->uz_flags & (UMA_ZONE_NOKASAN | UMA_ZFLAG_CACHE |
-		 UMA_ZONE_NOKASAN_QUARANTINE)) != 0) {
-		return_kqi.kqi_zone = zone;
-		return_kqi.kqi_item = item;
-		return_kqi.kqi_udata = udata;
-		return (return_kqi);
-	}
-
 	sz = zone->uz_size;
 	put_kqi = uma_zalloc(kasan_quarantine_items_zone, M_NOWAIT);
 
 	critical_enter();
+#ifdef KASAN_QUARANTINE_SMR
+	if (smr) {
+		curcpu_quarantine = DPCPU_PTR(kasan_quarantine_smr);
+	} else {
+		curcpu_quarantine = DPCPU_PTR(kasan_quarantine);
+	}
+#else
 	curcpu_quarantine = DPCPU_PTR(kasan_quarantine);
+#endif
 	if (put_kqi == NULL) {
 		if (STAILQ_EMPTY(&curcpu_quarantine->kq_itemlist)) {
 			critical_exit();
@@ -930,6 +945,9 @@ zone_fetch_bucket(uma_zone_t zone, uma_zone_domain_t zdom, bool reclaim)
 	long cnt;
 	int i;
 	bool dtor = false;
+#if defined(KASAN) && defined(KASAN_QUARANTINE_SMR)
+	bool do_quarantine = false;
+#endif
 
 	ZDOM_LOCK_ASSERT(zdom);
 
@@ -943,6 +961,9 @@ zone_fetch_bucket(uma_zone_t zone, uma_zone_domain_t zdom, bool reclaim)
 			return (NULL);
 		bucket->ub_seq = SMR_SEQ_INVALID;
 		dtor = (zone->uz_dtor != NULL) || UMA_ALWAYS_CTORDTOR;
+#if defined(KASAN) && defined(KASAN_QUARANTINE_SMR)
+		do_quarantine = true;
+#endif
 		if (STAILQ_NEXT(bucket, ub_link) != NULL)
 			zdom->uzd_seq = STAILQ_NEXT(bucket, ub_link)->ub_seq;
 	}
@@ -977,10 +998,47 @@ zone_fetch_bucket(uma_zone_t zone, uma_zone_domain_t zdom, bool reclaim)
 	}
 
 	ZDOM_UNLOCK(zdom);
-	if (dtor)
-		for (i = 0; i < bucket->ub_cnt; i++)
+	if (dtor) {
+		for (i = 0; i < bucket->ub_cnt; i++) {
 			item_dtor(zone, bucket->ub_bucket[i], zone->uz_size,
 			    NULL, SKIP_NONE);
+		}
+	}
+
+	for (i = 0; i < bucket->ub_cnt; i++) {
+		kasan_mark_item_invalid(zone, bucket->ub_bucket[i]);
+	}
+#if defined(KASAN) && defined(KASAN_QUARANTINE_SMR)
+	/*
+	 * XXX-ZY: Should we hook in zone_put_bucket instead?
+	 */
+	if (do_quarantine && kasan_quarantine_enabled && 
+		(zone->uz_flags & (UMA_ZONE_NOKASAN | UMA_ZFLAG_CACHE |
+		 UMA_ZONE_NOKASAN_QUARANTINE)) == 0) {
+		for (i = 0; i < bucket->ub_cnt; i++) {
+			struct kasan_quarantine_item kqi;
+			uma_zone_t other_zone;
+			void *other_item;
+			kqi = kasan_quarantine_put(zone, bucket->ub_bucket[i], NULL, true);
+			other_zone = kqi.kqi_zone;
+			other_item = kqi.kqi_item;
+			if (other_item != NULL) {
+				if (other_zone->uz_fini) {
+					kasan_mark_item_valid(other_zone, other_item);
+					other_zone->uz_fini(other_item, other_zone->uz_size);
+					kasan_mark_item_invalid(other_zone, other_item);
+				}
+				other_zone->uz_release(other_zone->uz_arg, &other_item, 1);
+				if (other_zone->uz_max_items > 0)
+					zone_free_limit(other_zone, 1);
+			}
+			bucket->ub_bucket[i] = NULL;
+		}
+		bucket->ub_cnt = 0;
+		bucket_free(zone, bucket, NULL);
+		return (NULL);
+	}
+#endif // KASAN && KASAN_QUARANTINE_SMR
 
 	return (bucket);
 }
@@ -1489,9 +1547,54 @@ bucket_drain(uma_zone_t zone, uma_bucket_t bucket)
 	    bucket->ub_seq != SMR_SEQ_INVALID) {
 		smr_wait(zone->uz_smr, bucket->ub_seq);
 		bucket->ub_seq = SMR_SEQ_INVALID;
-		for (i = 0; i < bucket->ub_cnt; i++)
+		for (i = 0; i < bucket->ub_cnt; i++) {
 			item_dtor(zone, bucket->ub_bucket[i],
 			    zone->uz_size, NULL, SKIP_NONE);
+			kasan_mark_item_invalid(zone, bucket->ub_bucket[i]);
+		}
+#if defined(KASAN) && defined(KASAN_QUARANTINE_SMR)
+		if (kasan_quarantine_enabled && 
+			(zone->uz_flags & (UMA_ZONE_NOKASAN | UMA_ZFLAG_CACHE |
+			UMA_ZONE_NOKASAN_QUARANTINE)) == 0) {
+			/*
+			 * This behaves like draining a cross-domain bucket
+			 * because KASAN quarantine is not domain-aware.
+			 */
+			int new_bucket_count = 0;
+			for (i = 0; i < bucket->ub_cnt; i++) {
+				struct kasan_quarantine_item kqi;
+				uma_zone_t other_zone;
+				void *other_item;
+				kqi = kasan_quarantine_put(zone, bucket->ub_bucket[i], NULL, true);
+				other_zone = kqi.kqi_zone;
+				other_item = kqi.kqi_item;
+				if (other_item != NULL) {
+					if (other_zone == zone) {
+						bucket->ub_bucket[i] = NULL;
+						bucket->ub_bucket[new_bucket_count++] = other_item;
+					} else {
+						/* Free manually to keg. */
+						if (other_zone->uz_fini) {
+							kasan_mark_item_valid(other_zone, other_item);
+							other_zone->uz_fini(other_item, other_zone->uz_size);
+							kasan_mark_item_invalid(other_zone, other_item);
+						}
+						other_zone->uz_release(other_zone->uz_arg, &other_item, 1);
+						if (other_zone->uz_max_items > 0)
+							zone_free_limit(other_zone, 1);
+						bucket->ub_bucket[i] = NULL;
+					}
+				} else {
+					bucket->ub_bucket[i] = NULL;
+				}
+			}
+			bucket->ub_cnt = new_bucket_count;
+			if (bucket->ub_cnt == 0) {
+				/* Nothing to do. */
+				return;
+			}
+		}
+#endif // KASAN && KASAN_QUARANTINE_SMR
 	}
 	if (zone->uz_fini)
 		for (i = 0; i < bucket->ub_cnt; i++) {
@@ -3728,8 +3831,6 @@ item_dtor(uma_zone_t zone, void *item, int size, void *udata,
 			trash_dtor(item, size, zone);
 #endif
 	}
-	// XXXR3: this may not be called in uma_zfree_arg
-	kasan_mark_item_invalid(zone, item);
 }
 
 #ifdef NUMA
@@ -4766,35 +4867,25 @@ uma_zfree_arg(uma_zone_t zone, void *item, void *udata)
 
 	kasan_mark_item_invalid(zone, item);
 #ifdef KASAN
-	struct kasan_quarantine_item kqi;
-	kqi = kasan_quarantine_put(zone, item, udata);
-	zone = kqi.kqi_zone;
-	item = kqi.kqi_item;
-	udata = kqi.kqi_udata;
-	if (item == NULL) {
-		return;
-	}
-	if ((zone->uz_flags & UMA_ZONE_SMR) != 0) {
-		/*
-		 * Quarantined SMR items should be treated differently.
-		 * They should not be cached to the allocbucket or it 
-		 * will cause confusion.
-		 * XXXR3: Can we do better with a better SMR quarantine
-		 * design?
-		 */
-		if (zone->uz_fini) {
-			kasan_mark_item_valid(zone, item);
-			zone->uz_fini(item, zone->uz_size);
-			kasan_mark_item_invalid(zone, item);
+	if (kasan_quarantine_enabled && 
+		(uz_flags & (UMA_ZONE_NOKASAN | UMA_ZFLAG_CACHE |
+		 UMA_ZONE_NOKASAN_QUARANTINE)) == 0) {
+		struct kasan_quarantine_item kqi;
+#ifdef KASAN_QUARANTINE_SMR
+		kqi = kasan_quarantine_put(zone, item, udata, false);
+#else
+		kqi = kasan_quarantine_put(zone, item, udata);
+#endif
+		zone = kqi.kqi_zone;
+		item = kqi.kqi_item;
+		udata = kqi.kqi_udata;
+		if (item == NULL) {
+			return;
 		}
-		zone->uz_release(zone->uz_arg, &item, 1);
-		counter_u64_add(zone->uz_frees, 1);
-		if (zone->uz_max_items > 0)
-			zone_free_limit(zone, 1);
-		return;
+		KASSERT((zone->uz_flags & UMA_ZONE_SMR) == 0, ("SMR zone items are not allowed."));
+		cache = &zone->uz_cpu[curcpu];
+		uz_flags = cache_uz_flags(cache);
 	}
-	cache = &zone->uz_cpu[curcpu];
-	uz_flags = cache_uz_flags(cache);
 #endif
 	/*
 	 * The race here is acceptable.  If we miss it we'll just have to wait
@@ -5173,6 +5264,26 @@ zone_free_item(uma_zone_t zone, void *item, void *udata, enum zfreeskip skip)
 		smr_synchronize(zone->uz_smr);
 
 	item_dtor(zone, item, zone->uz_size, udata, skip);
+	kasan_mark_item_invalid(zone, item);
+#if defined(KASAN) && defined(KASAN_QUARANTINE_SMR)
+	/*
+	 * This should only be reachable from free requests that are sent
+	 * directly to an SMR zone.
+	 */
+	if ((zone->uz_flags & UMA_ZONE_SMR) != 0 && skip == SKIP_NONE) {
+		if (kasan_quarantine_enabled && 
+			(zone->uz_flags & (UMA_ZONE_NOKASAN | UMA_ZFLAG_CACHE |
+			UMA_ZONE_NOKASAN_QUARANTINE)) == 0) {
+			struct kasan_quarantine_item kqi;
+			kqi = kasan_quarantine_put(zone, item, udata, true);
+			zone = kqi.kqi_zone;
+			item = kqi.kqi_item;
+			udata = kqi.kqi_udata;
+			if (item == NULL)
+				return;
+		}
+	}
+#endif
 
 	if (skip < SKIP_FINI && zone->uz_fini) {
 		kasan_mark_item_valid(zone, item);

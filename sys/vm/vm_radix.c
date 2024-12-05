@@ -115,7 +115,7 @@ vm_radix_zinit(void)
 
 	vm_radix_node_zone = uma_zcreate("RADIX NODE", pctrie_node_size(),
 	    NULL, NULL, pctrie_zone_init, NULL,
-	    PCTRIE_PAD, UMA_ZONE_VM | UMA_ZONE_SMR);
+	    PCTRIE_PAD, UMA_ZONE_VM | UMA_ZONE_SMR | UMA_ZONE_NOKASAN_QUARANTINE);
 	vm_radix_smr = uma_zone_get_smr(vm_radix_node_zone);
 }
 
