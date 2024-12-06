@@ -575,7 +575,7 @@ kasan_mark_item_valid(uma_zone_t zone, void *item)
 		return;
 
 	sz = zone->uz_size;
-	rsz = roundup2(sz, KASAN_SHADOW_SCALE);
+	rsz = zone->uz_keg->uk_rsize;
 	if ((zone->uz_flags & UMA_ZONE_PCPU) == 0) {
 		kasan_mark(item, sz, rsz, KASAN_GENERIC_REDZONE);
 	} else {
@@ -590,19 +590,19 @@ static void
 kasan_mark_item_invalid(uma_zone_t zone, void *item)
 {
 	void *pcpu_item;
-	size_t sz;
+	size_t rsz;
 	int i;
 
 	if ((zone->uz_flags & UMA_ZONE_NOKASAN) != 0)
 		return;
 
-	sz = roundup2(zone->uz_size, KASAN_SHADOW_SCALE);
+	rsz = zone->uz_keg->uk_rsize;
 	if ((zone->uz_flags & UMA_ZONE_PCPU) == 0) {
-		kasan_mark(item, 0, sz, KASAN_UMA_FREED);
+		kasan_mark(item, 0, rsz, KASAN_UMA_FREED);
 	} else {
 		pcpu_item = zpcpu_base_to_offset(item);
 		for (i = 0; i <= mp_maxid; i++)
-			kasan_mark(zpcpu_get_cpu_obj(pcpu_item, i, sz), 0, sz,
+			kasan_mark(zpcpu_get_cpu_obj(pcpu_item, i, rsz), 0, rsz,
 			    KASAN_UMA_FREED);
 	}
 }
@@ -657,7 +657,7 @@ kasan_quarantine_init(void)
 #endif
 	kasan_quarantine_items_zone = uma_zcreate("KASAN quarantine item",
 		sizeof(struct kasan_quarantine_item), NULL, NULL, NULL, NULL,
-		UMA_ALIGN_PTR, UMA_ZONE_NOKASAN_QUARANTINE);
+		UMA_ALIGN_PTR, UMA_ZONE_NOKASAN_QUARANTINE | UMA_ZONE_NOKASAN);
 	// uma_zone_reserve(kasan_quarantine_items_zone, KASAN_QUARANTINE_ENTRIES / 50);
 	uma_prealloc(kasan_quarantine_items_zone, KASAN_QUARANTINE_ENTRIES / 50);
 
@@ -2550,6 +2550,33 @@ keg_layout_one(uma_keg_t keg, u_int rsize, u_int slabsize, u_int fmt,
 	kl->eff = UMA_FRAC_FIXPT(kl->ipers * rsize, total);
 }
 
+#if defined(KASAN) && defined(KASAN_UMA_REDZONES)
+/*
+ * Redzone policy taken from Linux KASAN.
+ */
+static u_int
+optimal_redzone_size(uint32_t object_size)
+{
+	if (object_size <= 64 - 16) {
+		return (16);
+	} else if (object_size <= 128 - 32) {
+		return (32);
+	} else if (object_size <= 512 - 64) {
+		return (64);
+	} else if (object_size <= 4096 - 128) {
+		return (128);
+	} else if (object_size <= (1 << 14) - 256) {
+		return (256);
+	} else if (object_size <= (1 << 15) - 512) {
+		return (512);
+	} else if (object_size <= (1 << 16) - 1024) {
+		return (1024);
+	} else {
+		return (2048);
+	}
+}
+#endif
+
 /*
  * Determine the format of a uma keg.  This determines where the slab header
  * will be placed (inline or offpage) and calculates ipers, rsize, and ppera.
@@ -2599,6 +2626,15 @@ keg_layout(uma_keg_t keg)
 	 * allocation bits for we round it up.
 	 */
 	rsize = MAX(keg->uk_size, UMA_SMALLEST_UNIT);
+#if defined(KASAN) && defined(KASAN_UMA_REDZONES)
+	/*
+	 * Add KASAN redzone padding.
+	 */
+	if ((keg->uk_flags & (UMA_ZONE_MALLOC | UMA_ZFLAG_CACHE |
+			UMA_ZONE_NOKASAN)) == 0) {
+		rsize += optimal_redzone_size(keg->uk_size);
+	}
+#endif
 	rsize = roundup2(rsize, alignsize);
 
 	if ((keg->uk_flags & UMA_ZONE_CACHESPREAD) != 0) {
