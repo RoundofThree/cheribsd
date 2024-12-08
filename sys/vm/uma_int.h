@@ -463,6 +463,9 @@ struct uma_zone {
 	/* Offset 0, used in alloc/free fast/medium fast path and const. */
 	uint32_t	uz_flags;	/* Flags inherited from kegs */
 	uint32_t	uz_size;	/* Size inherited from kegs */
+#if defined(KASAN) && defined(KASAN_UMA_REDZONES)
+	uint32_t	uz_rzoff;	/* Offset to right redzone */
+#endif
 	uma_ctor	uz_ctor;	/* Constructor for each allocation */
 	uma_dtor	uz_dtor;	/* Destructor */
 	smr_t		uz_smr;		/* Safe memory reclaim context. */

@@ -229,6 +229,9 @@ static struct timeout_task uma_timeout_task;
 struct uma_zctor_args {
 	const char *name;
 	size_t size;
+#if defined(KASAN) && defined(KASAN_UMA_REDZONES)
+	size_t rzoff;
+#endif
 	uma_ctor ctor;
 	uma_dtor dtor;
 	uma_init uminit;
@@ -574,8 +577,12 @@ kasan_mark_item_valid(uma_zone_t zone, void *item)
 	if ((zone->uz_flags & UMA_ZONE_NOKASAN) != 0)
 		return;
 
+#ifdef KASAN_UMA_REDZONES
+	sz = zone->uz_rzoff;
+#else
 	sz = zone->uz_size;
-	rsz = zone->uz_keg->uk_rsize;
+#endif
+	rsz = roundup2(sz, KASAN_SHADOW_SCALE);
 	if ((zone->uz_flags & UMA_ZONE_PCPU) == 0) {
 		kasan_mark(item, sz, rsz, KASAN_GENERIC_REDZONE);
 	} else {
@@ -596,7 +603,7 @@ kasan_mark_item_invalid(uma_zone_t zone, void *item)
 	if ((zone->uz_flags & UMA_ZONE_NOKASAN) != 0)
 		return;
 
-	rsz = zone->uz_keg->uk_rsize;
+	rsz = roundup2(zone->uz_size, KASAN_SHADOW_SCALE);
 	if ((zone->uz_flags & UMA_ZONE_PCPU) == 0) {
 		kasan_mark(item, 0, rsz, KASAN_UMA_FREED);
 	} else {
@@ -2550,33 +2557,6 @@ keg_layout_one(uma_keg_t keg, u_int rsize, u_int slabsize, u_int fmt,
 	kl->eff = UMA_FRAC_FIXPT(kl->ipers * rsize, total);
 }
 
-#if defined(KASAN) && defined(KASAN_UMA_REDZONES)
-/*
- * Redzone policy taken from Linux KASAN.
- */
-static u_int
-optimal_redzone_size(uint32_t object_size)
-{
-	if (object_size <= 64 - 16) {
-		return (16);
-	} else if (object_size <= 128 - 32) {
-		return (32);
-	} else if (object_size <= 512 - 64) {
-		return (64);
-	} else if (object_size <= 4096 - 128) {
-		return (128);
-	} else if (object_size <= (1 << 14) - 256) {
-		return (256);
-	} else if (object_size <= (1 << 15) - 512) {
-		return (512);
-	} else if (object_size <= (1 << 16) - 1024) {
-		return (1024);
-	} else {
-		return (2048);
-	}
-}
-#endif
-
 /*
  * Determine the format of a uma keg.  This determines where the slab header
  * will be placed (inline or offpage) and calculates ipers, rsize, and ppera.
@@ -2626,15 +2606,6 @@ keg_layout(uma_keg_t keg)
 	 * allocation bits for we round it up.
 	 */
 	rsize = MAX(keg->uk_size, UMA_SMALLEST_UNIT);
-#if defined(KASAN) && defined(KASAN_UMA_REDZONES)
-	/*
-	 * Add KASAN redzone padding.
-	 */
-	if ((keg->uk_flags & (UMA_ZONE_MALLOC | UMA_ZFLAG_CACHE |
-			UMA_ZONE_NOKASAN)) == 0) {
-		rsize += optimal_redzone_size(keg->uk_size);
-	}
-#endif
 	rsize = roundup2(rsize, alignsize);
 
 	if ((keg->uk_flags & UMA_ZONE_CACHESPREAD) != 0) {
@@ -3276,6 +3247,10 @@ zone_ctor(void *mem, int size, void *udata, int flags)
 	zone->uz_flags |= (keg->uk_flags &
 	    (UMA_ZONE_INHERIT | UMA_ZFLAG_INHERIT));
 
+#if defined(KASAN) && defined(KASAN_UMA_REDZONES)
+	zone->uz_rzoff = arg->rzoff;
+#endif
+
 out:
 	if (booted >= BOOT_PCPU) {
 		zone_alloc_counters(zone, NULL);
@@ -3467,6 +3442,10 @@ uma_startup1(vm_pointer_t virtual_avail)
 	memset(&args, 0, sizeof(args));
 	args.name = "UMA Kegs";
 	args.size = ksize;
+#if defined(KASAN) && defined(KASAN_UMA_REDZONES)
+	/* No redzone */
+	args.rzoff = ksize;
+#endif
 	args.ctor = keg_ctor;
 	args.dtor = keg_dtor;
 	args.uminit = zero_init;
@@ -3478,6 +3457,10 @@ uma_startup1(vm_pointer_t virtual_avail)
 
 	args.name = "UMA Zones";
 	args.size = zsize;
+#if defined(KASAN) && defined(KASAN_UMA_REDZONES)
+	/* No redzone */
+	args.rzoff = zsize;
+#endif
 	args.ctor = zone_ctor;
 	args.dtor = zone_dtor;
 	args.uminit = zero_init;
@@ -3651,6 +3634,13 @@ uma_zcreate(const char *name, size_t size, uma_ctor ctor, uma_dtor dtor,
 	memset(&args, 0, sizeof(args));
 	args.name = name;
 	args.size = size;
+#if defined(KASAN) && defined(KASAN_UMA_REDZONES)
+	args.rzoff = size;
+	if ((flags & (UMA_ZONE_NOKASAN | UMA_ZONE_NOKASAN_REDZONE |
+			UMA_ZONE_MALLOC | UMA_ZFLAG_CACHE)) == 0) {
+		args.size = size + optimal_redzone_size(size);
+	}
+#endif
 	args.ctor = ctor;
 	args.dtor = dtor;
 	args.uminit = uminit;
@@ -3694,6 +3684,13 @@ uma_zsecond_create(const char *name, uma_ctor ctor, uma_dtor dtor,
 	memset(&args, 0, sizeof(args));
 	args.name = name;
 	args.size = keg->uk_size;
+#if defined(KASAN) && defined(KASAN_UMA_REDZONES)
+	/*
+	 * This is ugly as we inherit from the primary zone
+	 * instead of from the shared keg.
+	 */
+	args.rzoff = primary->uz_rzoff;
+#endif
 	args.ctor = ctor;
 	args.dtor = dtor;
 	args.uminit = zinit;
@@ -3720,6 +3717,9 @@ uma_zcache_create(const char *name, int size, uma_ctor ctor, uma_dtor dtor,
 	memset(&args, 0, sizeof(args));
 	args.name = name;
 	args.size = size;
+#if defined(KASAN) && defined(KASAN_UMA_REDZONES)
+	args.rzoff = size;
+#endif
 	args.ctor = ctor;
 	args.dtor = dtor;
 	args.uminit = zinit;
@@ -3766,10 +3766,16 @@ void *
 uma_zalloc_pcpu_arg(uma_zone_t zone, void *udata, int flags)
 {
 	void *item, *pcpu_item;
+	size_t sz;
 #ifdef SMP
 	int i;
 
 	MPASS(zone->uz_flags & UMA_ZONE_PCPU);
+#endif
+#if defined(KASAN) && defined(KASAN_UMA_REDZONES)
+	sz = zone->uz_rzoff;
+#else
+	sz = zone->uz_size;
 #endif
 	item = uma_zalloc_arg(zone, udata, flags & ~M_ZERO);
 	if (item == NULL)
@@ -3778,10 +3784,10 @@ uma_zalloc_pcpu_arg(uma_zone_t zone, void *udata, int flags)
 	if (flags & M_ZERO) {
 #ifdef SMP
 		for (i = 0; i <= mp_maxid; i++)
-			bzero(zpcpu_get_cpu_obj(pcpu_item, i, zone->uz_size),
-			    zone->uz_size);
+			bzero(zpcpu_get_cpu_obj(pcpu_item, i, sz),
+			    sz);
 #else
-		bzero(item, zone->uz_size);
+		bzero(item, sz);
 #endif
 	}
 	return (pcpu_item);
@@ -3817,6 +3823,10 @@ item_ctor(uma_zone_t zone, int uz_flags, int size, void *udata, int flags,
 
 	kasan_mark_item_valid(zone, item);
 	kmsan_mark_item_uninitialized(zone, item);
+
+#if defined(KASAN) && defined(KASAN_UMA_REDZONES)
+	size = zone->uz_rzoff;
+#endif
 
 #ifdef INVARIANTS
 	skipdbg = uma_dbg_zskip(zone, item);
@@ -3857,6 +3867,9 @@ item_dtor(uma_zone_t zone, void *item, int size, void *udata,
 		else
 			uma_dbg_free(zone, NULL, item);
 	}
+#endif
+#if defined(KASAN) && defined(KASAN_UMA_REDZONES)
+	size = zone->uz_rzoff;
 #endif
 	if (__predict_true(skip < SKIP_DTOR)) {
 		if (zone->uz_dtor != NULL)

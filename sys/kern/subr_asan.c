@@ -149,6 +149,35 @@ kasan_init_early(vm_offset_t stack, size_t size)
 	kasan_md_init_early(stack, size);
 }
 
+#if defined(KASAN) && defined(KASAN_UMA_REDZONES)
+/*
+ * Redzone policy taken from Linux KASAN.
+ * Redzone size is always greater than UMA_SMALLEST_UNIT.
+ */
+u_int
+optimal_redzone_size(uint32_t object_size)
+{
+	// if (object_size <= 64 - 16) {
+	// 	return (16);
+	// } else if (object_size <= 128 - 32) {
+	// 	return (32);
+	// } else if (object_size <= 512 - 64) {
+	// 	return (64);
+	// } else if (object_size <= 4096 - 128) {
+	// 	return (128);
+	// } else if (object_size <= (1 << 14) - 256) {
+	// 	return (256);
+	// } else if (object_size <= (1 << 15) - 512) {
+	// 	return (512);
+	// } else if (object_size <= (1 << 16) - 1024) {
+	// 	return (1024);
+	// } else {
+	// 	return (2048);
+	// }
+	return (32);
+}
+#endif
+
 static inline const char *
 kasan_code_name(uint8_t code)
 {

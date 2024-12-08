@@ -286,6 +286,9 @@ uma_zone_t uma_zcache_create(const char *name, int size, uma_ctor ctor,
 #define UMA_ZONE_NOKASAN_QUARANTINE	0x100000 /* Disable KASAN
 					 * quarantining.
 					 */
+#define UMA_ZONE_NOKASAN_REDZONE	0X200000 /* Disable KASAN
+					 * redzone padding.
+					 */
 /* In use by UMA_ZFLAGs:	0xffe00000 */
 
 /*
@@ -297,7 +300,7 @@ uma_zone_t uma_zcache_create(const char *name, int size, uma_ctor ctor,
     (UMA_ZONE_NOTOUCH | UMA_ZONE_MALLOC | UMA_ZONE_NOFREE |		\
      UMA_ZONE_VM | UMA_ZONE_NOTPAGE | UMA_ZONE_PCPU |			\
      UMA_ZONE_FIRSTTOUCH | UMA_ZONE_ROUNDROBIN | UMA_ZONE_NOKASAN | \
-	 UMA_ZONE_NOKASAN_QUARANTINE)
+	 UMA_ZONE_NOKASAN_QUARANTINE | UMA_ZONE_NOKASAN_REDZONE)
 
 /* Definitions for align */
 #define UMA_ALIGN_PTR	(sizeof(void * __capability) - 1) /* Align for ptr */
