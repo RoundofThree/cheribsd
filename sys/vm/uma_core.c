@@ -969,7 +969,9 @@ zone_fetch_bucket(uma_zone_t zone, uma_zone_domain_t zdom, bool reclaim)
 		bucket->ub_seq = SMR_SEQ_INVALID;
 		dtor = (zone->uz_dtor != NULL) || UMA_ALWAYS_CTORDTOR;
 #if defined(KASAN) && defined(KASAN_QUARANTINE_SMR)
-		do_quarantine = true;
+		do_quarantine = kasan_quarantine_enabled && 
+			((zone->uz_flags & (UMA_ZONE_NOKASAN | UMA_ZFLAG_CACHE |
+			UMA_ZONE_NOKASAN_QUARANTINE)) == 0);
 #endif
 		if (STAILQ_NEXT(bucket, ub_link) != NULL)
 			zdom->uzd_seq = STAILQ_NEXT(bucket, ub_link)->ub_seq;
@@ -1019,9 +1021,7 @@ zone_fetch_bucket(uma_zone_t zone, uma_zone_domain_t zdom, bool reclaim)
 	/*
 	 * XXX-ZY: Should we hook in zone_put_bucket instead?
 	 */
-	if (do_quarantine && kasan_quarantine_enabled && 
-		(zone->uz_flags & (UMA_ZONE_NOKASAN | UMA_ZFLAG_CACHE |
-		 UMA_ZONE_NOKASAN_QUARANTINE)) == 0) {
+	if (do_quarantine) {
 		for (i = 0; i < bucket->ub_cnt; i++) {
 			struct kasan_quarantine_item kqi;
 			uma_zone_t other_zone;
@@ -1043,6 +1043,8 @@ zone_fetch_bucket(uma_zone_t zone, uma_zone_domain_t zdom, bool reclaim)
 		}
 		bucket->ub_cnt = 0;
 		bucket_free(zone, bucket, NULL);
+		/* This is ugly but we must lock the domain when returning with NULL. */
+		ZDOM_LOCK(zdom);
 		return (NULL);
 	}
 #endif // KASAN && KASAN_QUARANTINE_SMR
