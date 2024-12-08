@@ -1842,6 +1842,12 @@ keg_free_slab(uma_keg_t keg, uma_slab_t slab, int start)
 	size_t size;
 	int i;
 	uint8_t flags;
+	size_t item_size;
+#if defined(KASAN) && defined(KASAN_UMA_REDZONES)
+	item_size = LIST_FIRST(&keg->uk_zones)->uz_rzoff;
+#else
+	item_size = keg->uk_size;
+#endif
 
 	CTR4(KTR_UMA, "keg_free_slab keg %s(%p) slab %p, returning %d bytes",
 	    keg->uk_name, keg, slab, PAGE_SIZE * keg->uk_ppera);
@@ -1864,7 +1870,7 @@ keg_free_slab(uma_keg_t keg, uma_slab_t slab, int start)
 		if (!uma_dbg_kskip(keg, slab_item(slab, keg, i)) ||
 		    keg->uk_fini != trash_fini)
 #endif
-			keg->uk_fini(slab_item(slab, keg, i), keg->uk_size);
+			keg->uk_fini(slab_item(slab, keg, i), item_size);
 	}
 	flags = slab->us_flags;
 	if (keg->uk_flags & UMA_ZFLAG_OFFPAGE) {
@@ -2005,6 +2011,12 @@ keg_alloc_slab(uma_keg_t keg, uma_zone_t zone, int domain, int flags,
 	uint8_t *mem;
 	uint8_t sflags;
 	int i;
+	size_t item_size;
+#if defined(KASAN) && defined(KASAN_UMA_REDZONES)
+	item_size = zone->uz_rzoff;
+#else
+	item_size = keg->uk_size;
+#endif
 
 	TSENTER();
 
@@ -2084,7 +2096,7 @@ keg_alloc_slab(uma_keg_t keg, uma_zone_t zone, int domain, int flags,
 	if (keg->uk_init != NULL) {
 		for (i = 0; i < keg->uk_ipers; i++)
 			if (keg->uk_init(slab_item(slab, keg, i),
-			    keg->uk_size, flags) != 0)
+			    item_size, flags) != 0)
 				break;
 		if (i != keg->uk_ipers) {
 			keg_free_slab(keg, slab, i);
@@ -3106,7 +3118,11 @@ zone_update_caches(uma_zone_t zone)
 	int i;
 
 	for (i = 0; i <= mp_maxid; i++) {
+#if defined(KASAN) && defined(KASAN_UMA_REDZONES)
+		cache_set_uz_size(&zone->uz_cpu[i], zone->uz_rzoff);
+#else
 		cache_set_uz_size(&zone->uz_cpu[i], zone->uz_size);
+#endif
 		cache_set_uz_flags(&zone->uz_cpu[i], zone->uz_flags);
 	}
 }
@@ -3824,10 +3840,6 @@ item_ctor(uma_zone_t zone, int uz_flags, int size, void *udata, int flags,
 	kasan_mark_item_valid(zone, item);
 	kmsan_mark_item_uninitialized(zone, item);
 
-#if defined(KASAN) && defined(KASAN_UMA_REDZONES)
-	size = zone->uz_rzoff;
-#endif
-
 #ifdef INVARIANTS
 	skipdbg = uma_dbg_zskip(zone, item);
 	if (!skipdbg && (uz_flags & UMA_ZFLAG_TRASH) != 0 &&
@@ -3948,23 +3960,29 @@ uma_zalloc_debug(uma_zone_t zone, void **itemp, void *udata, int flags)
 #endif
 
 #ifdef DEBUG_MEMGUARD
+	size_t item_size;
+#if defined(KASAN) && defined(KASAN_UMA_REDZONES)
+	item_size = zone->uz_rzoff;
+#else
+	item_size = zone->uz_size;
+#endif
 	if ((zone->uz_flags & (UMA_ZONE_SMR | UMA_ZFLAG_CACHE)) == 0 &&
 	    memguard_cmp_zone(zone)) {
 		void *item;
-		item = memguard_alloc(zone->uz_size, flags);
+		item = memguard_alloc(item_size, flags);
 		if (item != NULL) {
 			error = EJUSTRETURN;
 			if (zone->uz_init != NULL &&
-			    zone->uz_init(item, zone->uz_size, flags) != 0) {
+			    zone->uz_init(item, item_size, flags) != 0) {
 				*itemp = NULL;
 				return (error);
 			}
 			if (zone->uz_ctor != NULL &&
-			    zone->uz_ctor(item, zone->uz_size, udata,
+			    zone->uz_ctor(item, item_size, udata,
 			    flags) != 0) {
 				counter_u64_add(zone->uz_fails, 1);
 				if (zone->uz_fini != NULL)
-					zone->uz_fini(item, zone->uz_size);
+					zone->uz_fini(item, item_size);
 				*itemp = NULL;
 				return (error);
 			}
@@ -4212,6 +4230,12 @@ uma_zalloc_domain(uma_zone_t zone, void *udata, int domain, int flags)
 	uma_zone_domain_t zdom;
 	void *item;
 #endif
+	size_t item_size;
+#if defined(KASAN) && defined(KASAN_UMA_REDZONES)
+	item_size = zone->uz_rzoff;
+#else
+	item_size = zone->uz_size;
+#endif
 
 	/* Enable entropy collection for RANDOM_ENABLE_UMA kernel option */
 	random_harvest_fast_uma(&zone, sizeof(zone), RANDOM_UMA);
@@ -4249,7 +4273,7 @@ uma_zalloc_domain(uma_zone_t zone, void *udata, int domain, int flags)
 #endif
 		bucket->ub_cnt--;
 		zone_put_bucket(zone, domain, bucket, udata, true);
-		item = item_ctor(zone, zone->uz_flags, zone->uz_size, udata,
+		item = item_ctor(zone, zone->uz_flags, item_size, udata,
 		    flags, item);
 		if (item != NULL) {
 			KASSERT(item_domain(item) == domain,
@@ -4411,6 +4435,14 @@ slab_alloc_item(uma_keg_t keg, uma_slab_t slab)
 	uma_domain_t dom;
 	void *item;
 	int freei;
+#ifdef __CHERI_PURE_CAPABILITY__
+	size_t item_size;
+#if defined(KASAN) && defined(KASAN_UMA_REDZONES)
+	item_size = LIST_FIRST(&keg->uk_zones)->uz_rzoff;
+#else
+	item_size = keg->uk_size;
+#endif
+#endif
 
 	KEG_LOCK_ASSERT(keg, slab->us_domain);
 
@@ -4432,7 +4464,7 @@ slab_alloc_item(uma_keg_t keg, uma_slab_t slab)
 	}
 #ifdef __CHERI_PURE_CAPABILITY__
 	if ((keg->uk_flags & UMA_ZONE_PCPU) == 0)
-		item = cheri_setboundsexact(item, keg->uk_size);
+		item = cheri_setboundsexact(item, item_size);
 #endif
 
 	return (item);
@@ -4655,6 +4687,13 @@ zone_alloc_bucket(uma_zone_t zone, void *udata, int domain, int flags)
 {
 	uma_bucket_t bucket;
 	int error, maxbucket, cnt;
+	size_t item_size;
+
+#if defined(KASAN) && defined(KASAN_UMA_REDZONES)
+	item_size = zone->uz_rzoff;
+#else
+	item_size = zone->uz_size;
+#endif
 
 	CTR3(KTR_UMA, "zone_alloc_bucket zone %s(%p) domain %d", zone->uz_name,
 	    zone, domain);
@@ -4692,7 +4731,7 @@ zone_alloc_bucket(uma_zone_t zone, void *udata, int domain, int flags)
 		for (i = 0; i < bucket->ub_cnt; i++) {
 			kasan_mark_item_valid(zone, bucket->ub_bucket[i]);
 			error = zone->uz_init(bucket->ub_bucket[i],
-			    zone->uz_size, flags);
+			    item_size, flags);
 			kasan_mark_item_invalid(zone, bucket->ub_bucket[i]);
 			if (error != 0)
 				break;
@@ -4744,6 +4783,13 @@ static void *
 zone_alloc_item(uma_zone_t zone, void *udata, int domain, int flags)
 {
 	void *item;
+	size_t item_size;
+
+#if defined(KASAN) && defined(KASAN_UMA_REDZONES)
+	item_size = zone->uz_rzoff;
+#else
+	item_size = zone->uz_size;
+#endif
 
 	if (zone->uz_max_items > 0 && zone_alloc_limit(zone, 1, flags) == 0) {
 		counter_u64_add(zone->uz_fails, 1);
@@ -4758,7 +4804,7 @@ zone_alloc_item(uma_zone_t zone, void *udata, int domain, int flags)
 		goto fail_cnt;
 #ifdef __CHERI_PURE_CAPABILITY__
 	if ((zone->uz_flags & UMA_ZONE_PCPU) == 0)
-		item = cheri_setboundsexact(item, zone->uz_size);
+		item = cheri_setboundsexact(item, item_size);
 #endif
 
 	/*
@@ -4771,14 +4817,14 @@ zone_alloc_item(uma_zone_t zone, void *udata, int domain, int flags)
 		int error;
 
 		kasan_mark_item_valid(zone, item);
-		error = zone->uz_init(item, zone->uz_size, flags);
+		error = zone->uz_init(item, item_size, flags);
 		kasan_mark_item_invalid(zone, item);
 		if (error != 0) {
 			zone_free_item(zone, item, udata, SKIP_FINI | SKIP_CNT);
 			goto fail_cnt;
 		}
 	}
-	item = item_ctor(zone, zone->uz_flags, zone->uz_size, udata, flags,
+	item = item_ctor(zone, zone->uz_flags, item_size, udata, flags,
 	    item);
 	if (item == NULL)
 		goto fail;
@@ -4893,7 +4939,11 @@ uma_zfree_arg(uma_zone_t zone, void *item, void *udata)
 	 */
 	if ((zone->uz_flags & UMA_ZFLAG_CACHE) == 0) {
 		if ((zone->uz_flags & UMA_ZONE_PCPU) == 0)
+#if defined(KASAN) && defined(KASAN_UMA_REDZONES)
+			expected_size = zone->uz_rzoff;
+#else
 			expected_size = zone->uz_size;
+#endif
 		else
 			expected_size = zone->uz_keg->uk_ppera * PAGE_SIZE;
 		if (__predict_false(cheri_getlen(item) != expected_size))
