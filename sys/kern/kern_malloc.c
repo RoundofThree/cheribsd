@@ -692,6 +692,10 @@ void *
 	if (malloc_dbg(&va, &size, mtp, flags) != 0)
 		return (va);
 #endif
+#if defined(KASAN) && defined(KASAN_UMA_REDZONES) && !defined(DEBUG_REDZONE)
+	/* Will this conflict with DEBUG_REDZONE? */
+	size += optimal_redzone_size(osize, true);
+#endif
 
 	if (__predict_false(size > kmem_zmax))
 		return (malloc_large(size, mtp, DOMAINSET_RR(), flags
@@ -780,6 +784,10 @@ malloc_domainset(size_t size, struct malloc_type *mtp, struct domainset *ds,
 	if (malloc_dbg(&va, &size, mtp, flags) != 0)
 		return (va);
 #endif
+#if defined(KASAN) && defined(KASAN_UMA_REDZONES) && !defined(DEBUG_REDZONE)
+	/* Will this conflict with DEBUG_REDZONE? */
+	size += optimal_redzone_size(osize, true);
+#endif
 
 	if (__predict_false(size > kmem_zmax))
 		return (malloc_large(size, mtp, DOMAINSET_RR(), flags
@@ -847,6 +855,10 @@ malloc_domainset_exec(size_t size, struct malloc_type *mtp, struct domainset *ds
 	va = NULL;
 	if (malloc_dbg(&va, &size, mtp, flags) != 0)
 		return (va);
+#endif
+#if defined(KASAN) && defined(KASAN_UMA_REDZONES) && !defined(DEBUG_REDZONE)
+	/* Will this conflict with DEBUG_REDZONE? */
+	size += optimal_redzone_size(osize, true);
 #endif
 
 	return (malloc_large(size, mtp, ds, flags DEBUG_REDZONE_ARG));

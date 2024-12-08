@@ -157,9 +157,9 @@ kasan_init_early(vm_offset_t stack, size_t size)
  * Redzone size is always greater than UMA_SMALLEST_UNIT.
  */
 u_int
-optimal_redzone_size(uint32_t object_size, int flags)
+optimal_redzone_size(uint32_t object_size, bool is_malloc)
 {
-	if ((flags & UMA_ZONE_MALLOC) == 0) {
+	if (!is_malloc) {
 		return (KASAN_GUARD_SIZE); 
 	} else if (object_size <= 64 - 16) {
 		return (16);

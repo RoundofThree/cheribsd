@@ -3654,7 +3654,7 @@ uma_zcreate(const char *name, size_t size, uma_ctor ctor, uma_dtor dtor,
 	args.rzoff = size;
 	if ((flags & (UMA_ZONE_NOKASAN | UMA_ZONE_NOKASAN_REDZONE |
 			UMA_ZONE_MALLOC | UMA_ZFLAG_CACHE)) == 0) {
-		args.size = size + optimal_redzone_size(size, flags);
+		args.size = size + optimal_redzone_size(size, false);
 	}
 #endif
 	args.ctor = ctor;
