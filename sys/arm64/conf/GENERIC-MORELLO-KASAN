@@ -1,0 +1,5 @@
+include "GENERIC-MORELLO"
+
+options KASAN
+options KASAN_QUARANTINE_SMR
+options KASAN_UMA_REDZONES
