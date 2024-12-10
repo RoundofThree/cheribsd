@@ -354,7 +354,7 @@ kasan_unpoison_curstack(bool whole_stack)
 	td = curthread;
 	int onstack = sigonstack(curthread->td_frame->tf_sp);
 	if ((td->td_pflags & TDP_ALTSTACK) != 0 && !onstack) {
-		base = (uintptr_t)td->td_sigstk.ss_sp;
+		base = (uintptr_t)cheri_getaddress(td->td_sigstk.ss_sp);
 		sz = td->td_sigstk.ss_size;
 	} else {
 		base = td->td_kstack;
