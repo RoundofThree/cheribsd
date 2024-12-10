@@ -902,7 +902,7 @@ hidraw_ioctl(struct cdev *dev, u_long cmd, caddr_t addr, int flag,
 
 	case HIDIOCGRDESC:
 		hrd = *(struct hidraw_report_descriptor **)addr;
-		error = copyin(&hrd->size, &size, sizeof(uint32_t));
+		error = copyin(PTR2CAP(&hrd->size), &size, sizeof(uint32_t));
 		if (error)
 			return (error);
 		/*

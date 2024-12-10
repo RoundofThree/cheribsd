@@ -127,7 +127,7 @@ struct ctl_io_stats {
 };
 
 struct ctl_get_io_stats {
-	struct ctl_io_stats	*stats;		/* passed to/from kernel */
+	struct ctl_io_stats	* __kerncap stats;		/* passed to/from kernel */
 	size_t			alloc_len;	/* passed to kernel */
 	size_t			fill_len;	/* passed to userland */
 	int			first_item;	/* passed to kernel */
