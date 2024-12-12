@@ -1,8 +1,4 @@
-include	"GENERIC-MORELLO-PURECAP"
+include	"GENERIC-MORELLO-PURECAP-KASAN"
 include	"std.MFS-ROOT"
 
-ident	GENERIC-MORELLO-PURECAP-KASAN
-
-options 	KASAN
-# Disable SMR quarantining by default
-#options     KASAN_QUARANTINE_SMR
+ident	GENERIC-MORELLO-PURECAP-KASAN-MFS-ROOT

@@ -1,5 +1,7 @@
 include "GENERIC-MORELLO"
 
+ident   GENERIC-MORELLO-KASAN
+
 options KASAN
 # SMR quarantining disabled by default
 #options KASAN_QUARANTINE_SMR
