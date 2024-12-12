@@ -1,3 +1,5 @@
+#NO_UNIVERSE
+
 include "GENERIC-MORELLO-KASAN"
 include	"std.MFS-ROOT"
 
