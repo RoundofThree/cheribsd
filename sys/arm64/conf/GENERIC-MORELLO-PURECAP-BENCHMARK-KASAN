@@ -1,0 +1,5 @@
+include     "GENERIC-MORELLO-PURECAP-KASAN"
+
+ident		GENERIC-MORELLO-PURECAP-BENCHMARK-KASAN
+
+machine 	arm64 aarch64cb
